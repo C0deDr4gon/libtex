@@ -1,6 +1,7 @@
 #pragma once
 
 #include "platform.h"
+#include "vec.h"
 
 static const int CHANNELS[7] = { 1, 0, 3, 1, 2, 0, 4 };
 static const int ADAM7[7][4] = { { 0, 0, 8, 8 }, { 4, 0, 8, 8 }, { 0, 4, 4, 8 }, { 2, 0, 4, 4 }, { 0, 2, 2, 4 }, { 1, 0, 2, 2 }, { 0, 1, 1, 2 } };
@@ -11,15 +12,32 @@ static int paeth(int a, int b, int c) {
   return pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
 }
 
+static void paeth_row(unsigned char *line, const unsigned char *prev, int stride, int bpp) {
+  int i = 0;
+  for (; i < bpp && i < stride; i++) line[i] += prev[i];
+  int g = bpp == 3 ? 3 : 4;
+  ivec keep = imake(-1, -1, -1, g == 4 ? -1 : 0);
+  for (; bpp >= 3 && i + 4 <= stride; i += g) {
+    ivec a = bytes4(iload4(line + i - bpp)), b = bytes4(iload4(prev + i)), c = bytes4(iload4(prev + i - bpp));
+    ivec pa = iabs(isub(b, c)), pb = iabs(isub(a, c)), pc = iabs(isub(iadd(a, b), iadd(c, c)));
+    ivec pred = iand(iselect(ior(igt(pa, pb), igt(pa, pc)), iselect(igt(pb, pc), c, b), a), keep);
+    ivec r = iand(iadd(bytes4(iload4(line + i)), pred), isplat(255));
+    istore4(line + i, narrow(r, r, r, r));
+  }
+  for (; i < stride; i++) line[i] += paeth(line[i - bpp], prev[i], prev[i - bpp]);
+}
+
 static void unfilter(int f, unsigned char *line, const unsigned char *prev, int stride, int bpp) {
-  for (int i = 0; i < stride; i++) {
-    int a = i >= bpp ? line[i - bpp] : 0;
-    int b = prev ? prev[i] : 0;
-    int c = i >= bpp && prev ? prev[i - bpp] : 0;
-    if (f == 1) line[i] += a;
-    else if (f == 2) line[i] += b;
-    else if (f == 3) line[i] += (a + b) >> 1;
-    else if (f == 4) line[i] += paeth(a, b, c);
+  int first = bpp < stride ? bpp : stride;
+  if (f == 1 || (f == 4 && !prev)) {
+    for (int i = bpp; i < stride; i++) line[i] += line[i - bpp];
+  } else if (f == 2 && prev) {
+    for (int i = 0; i < stride; i++) line[i] += prev[i];
+  } else if (f == 3) {
+    for (int i = 0; i < first; i++) line[i] += (prev ? prev[i] : 0) >> 1;
+    for (int i = bpp; i < stride; i++) line[i] += (line[i - bpp] + (prev ? prev[i] : 0)) >> 1;
+  } else if (f == 4) {
+    paeth_row(line, prev, stride, bpp);
   }
 }
 
@@ -56,12 +74,29 @@ static void png_pixel(const Png *p, float *out, const unsigned char *line, int x
   out[3] = a < 0 ? !key : p->depth <= 8 ? p->unit[a] : a / p->max;
 }
 
+static int png_value(const unsigned char *line, int i, int wide) { return wide ? line[i * 2] << 8 | line[i * 2 + 1] : line[i]; }
+
+static void png_row(const Png *p, float *out, const unsigned char *line, int width) {
+  int wide = p->depth == 16, m = (int)p->max;
+  vec max = splat(p->max);
+  if (p->n == 1) for (int x = 0; x < width; x++) {
+    int v = png_value(line, x, wide);
+    store(out + x * 4, vdiv(tofloatu(imake(v, v, v, m)), max));
+  }
+  if (p->n == 2) for (int x = 0; x < width; x++) {
+    int v = png_value(line, x * 2, wide);
+    store(out + x * 4, vdiv(tofloatu(imake(v, v, v, png_value(line, x * 2 + 1, wide))), max));
+  }
+  if (p->n == 3) for (int x = 0; x < width; x++) store(out + x * 4, vdiv(tofloatu(imake(png_value(line, x * 3, wide), png_value(line, x * 3 + 1, wide), png_value(line, x * 3 + 2, wide), m)), max));
+  if (p->n == 4) for (int x = 0; x < width; x++) store(out + x * 4, vdiv(tofloatu(imake(png_value(line, x * 4, wide), png_value(line, x * 4 + 1, wide), png_value(line, x * 4 + 2, wide), png_value(line, x * 4 + 3, wide))), max));
+}
+
 static void png_decode(unsigned char *raw, int width, int height, int depth, int color, int interlace, const unsigned char *palette, const unsigned char *trns, int trns_length, float *out) {
   Png p = { color, depth, CHANNELS[color], (1 << depth) - 1, { 0 }, palette, trns, trns_length };
   for (int v = 0; v < 256; v++) p.unit[v] = v / p.max;
   int bpp = p.n * depth >> 3;
   if (bpp < 1) bpp = 1;
-  int off = 0;
+  int off = 0, quick = depth >= 8 && color != 3 && !trns;
   for (int pass = 0; pass < (interlace ? 7 : 1); pass++) {
     int x0 = interlace ? ADAM7[pass][0] : 0, y0 = interlace ? ADAM7[pass][1] : 0;
     int dx = interlace ? ADAM7[pass][2] : 1, dy = interlace ? ADAM7[pass][3] : 1;
@@ -73,7 +108,8 @@ static void png_decode(unsigned char *raw, int width, int height, int depth, int
       unsigned char *line = raw + off + 1;
       unfilter(raw[off], line, prev, stride, bpp);
       off += 1 + stride;
-      for (int x = 0; x < pw; x++) png_pixel(&p, out + ((y0 + y * dy) * width + x0 + x * dx) * 4, line, x);
+      if (quick && !interlace) png_row(&p, out + y * width * 4, line, pw);
+      else for (int x = 0; x < pw; x++) png_pixel(&p, out + ((y0 + y * dy) * width + x0 + x * dx) * 4, line, x);
       prev = line;
     }
   }

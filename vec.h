@@ -36,6 +36,8 @@ static inline int all(ivec m) { return wasm_i32x4_all_true(m.v); }
 
 static inline ivec iload(const void *p) { return I(wasm_v128_load(p)); }
 static inline void istore(void *p, ivec a) { wasm_v128_store(p, a.v); }
+static inline ivec iload4(const void *p) { return I(wasm_v128_load32_zero(p)); }
+static inline void istore4(void *p, ivec a) { wasm_v128_store32_lane(p, a.v, 0); }
 static inline ivec isplat(int v) { return I(wasm_i32x4_splat(v)); }
 static inline ivec imake(int a, int b, int c, int d) { return I(wasm_i32x4_make(a, b, c, d)); }
 static inline ivec iadd(ivec a, ivec b) { return I(wasm_i32x4_add(a.v, b.v)); }
