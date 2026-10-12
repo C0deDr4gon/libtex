@@ -4,9 +4,9 @@
 #include "codec.h"
 #include "color.h"
 
-static void bc2_encode(const float *px, unsigned char *out) {
+static void bc2_encode(const float *px, unsigned char *out, const tex_options *o) {
   for (int i = 0; i < 16; i++) out[i >> 1] |= (int)fround(clamp(px[i * 4 + 3], 0, 1) * 15) << (i & 1) * 4;
-  encode_color(px, out + 8, 0);
+  encode_color(px, out + 8, 0, o);
 }
 
 static void bc2_decode(const unsigned char *in, float *px) {

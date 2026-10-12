@@ -31,7 +31,8 @@ static void store_block(float *dst, int width, int height, int bx, int by, const
   }
 }
 
-int tex_encode(tex_format id, const float *src, int width, int height, unsigned char *out, float *dst) {
+int tex_encode(tex_format id, const tex_options *o, const float *src, int width, int height, unsigned char *out, float *dst) {
+  if (!o) o = &TEX_DEFAULT;
   const Codec *codec = CODECS[id];
   float px[64];
   unsigned char bytes[256];
@@ -41,7 +42,7 @@ int tex_encode(tex_format id, const float *src, int width, int height, unsigned 
     for (int bx = 0; bx < bw; bx++) {
       load_block(src, width, height, bx, by, px);
       zero(bytes, 16);
-      codec->encode(px, bytes);
+      codec->encode(px, bytes, o);
       codec->decode(bytes, px);
       if (out) copy(out + (by * bw + bx) * codec->size, bytes, codec->size);
       store_block(dst, width, height, bx, by, px);

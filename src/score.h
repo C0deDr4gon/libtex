@@ -4,7 +4,8 @@
 #include "vec.h"
 #include "codec.h"
 
-void tex_score(const float *a, const float *b, int pixels, int channels, int hdr, double *out) {
+void tex_score(const float *a, const float *b, int pixels, int channels, int hdr, const tex_options *o, double *out) {
+  if (!o) o = &TEX_DEFAULT;
   ivec lanes = mask(channels);
   dvec sum = dsplat(0);
   vec peak = splat(0);
@@ -16,7 +17,7 @@ void tex_score(const float *a, const float *b, int pixels, int channels, int hdr
       peak = vmax(peak, keep(vabs(x), lanes));
     }
     vec d = keep(sub(x, y), lanes);
-    d = mul(mul(d, d), load(tint));
+    d = mul(mul(d, d), tint(o));
     sum = dadd(sum, dadd(dlow(d), dhigh(d)));
   }
   out[0] = dlane(sum, 0) + dlane(sum, 1);

@@ -1,6 +1,6 @@
 #pragma once
 
-static void encode_color(const float *px, unsigned char *out, int punch);
+static void encode_color(const float *px, unsigned char *out, int punch, const tex_options *o);
 static void decode_color(const unsigned char *in, float *px, int punch);
 
 #include "platform.h"
@@ -107,7 +107,7 @@ static void color_nudge(const vec *pixels, Try *best, int three, int punch) {
   }
 }
 
-static void encode_color(const float *px, unsigned char *out, int punch) {
+static void encode_color(const float *px, unsigned char *out, int punch, const tex_options *o) {
   vec pixels[16], pts[16], a = splat(0), b = splat(0);
   int count = 0, transparent = 0;
   for (int i = 0; i < 16; i++) {
@@ -117,12 +117,12 @@ static void encode_color(const float *px, unsigned char *out, int punch) {
   for (int i = 0; i < 16; i++) {
     opaque[i] = !transparent || px[i * 4 + 3] >= 0.5f;
     float w = punch ? 1 : clamp(px[i * 4 + 3], 1.0f / 64, 1);
-    color_weight[i] = mul(vmake(w, w, w, 1), load(tint));
+    color_weight[i] = mul(vmake(w, w, w, 1), tint(o));
     if (opaque[i]) pts[count++] = pixels[i];
   }
   if (count) endpoints(pts, count, 3, &a, &b);
   Try best = color_line(pixels, a, b, transparent, punch, count ? 2 : 0);
-  if (fast || !count) {
+  if (is_fast(o) || !count) {
     int pos = put(out, 0, best.c0, 16);
     pos = put(out, pos, best.c1, 16);
     for (int i = 0; i < 16; i++) pos = put(out, pos, best.idx[i], 2);

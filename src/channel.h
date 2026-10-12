@@ -1,6 +1,6 @@
 #pragma once
 
-static void encode_channel(const double *values, unsigned char *out, int sign);
+static void encode_channel(const double *values, unsigned char *out, int sign, const tex_options *o);
 static void decode_channel(const unsigned char *in, double *values, int sign);
 
 #include "platform.h"
@@ -109,7 +109,7 @@ static void search(const float *vs, End *best, int sign) {
   }
 }
 
-static void encode_channel(const double *values, unsigned char *out, int sign) {
+static void encode_channel(const double *values, unsigned char *out, int sign, const tex_options *o) {
   float vs[16];
   double r[8], hi = -1.0 / 0.0, lo = 1.0 / 0.0;
   double scale = sign ? 127 : 255;
@@ -120,7 +120,7 @@ static void encode_channel(const double *values, unsigned char *out, int sign) {
   }
   int a0 = (int)fround(hi * scale);
   int a1 = (int)fround(lo * scale);
-  if (!fast && a0 != a1) {
+  if (!is_fast(o) && a0 != a1) {
     unsigned char idx[16];
     End best = { a0, a1, channel_error(vs, a0, a1, sign, idx) };
     for (int o = 0; o < 2; o++) {

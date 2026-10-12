@@ -3,14 +3,14 @@
 #include "codec.h"
 #include "channel.h"
 
-static void bc5_encode(const float *px, unsigned char *out, int sign) {
+static void bc5_encode(const float *px, unsigned char *out, int sign, const tex_options *o) {
   double r[16], g[16];
   for (int i = 0; i < 16; i++) {
     r[i] = px[i * 4];
     g[i] = px[i * 4 + 1];
   }
-  encode_channel(r, out, sign);
-  encode_channel(g, out + 8, sign);
+  encode_channel(r, out, sign, o);
+  encode_channel(g, out + 8, sign, o);
 }
 
 static void bc5_decode(const unsigned char *in, float *px, int sign) {
@@ -25,9 +25,9 @@ static void bc5_decode(const unsigned char *in, float *px, int sign) {
   }
 }
 
-static void bc5_encode_u(const float *px, unsigned char *out) { bc5_encode(px, out, 0); }
+static void bc5_encode_u(const float *px, unsigned char *out, const tex_options *o) { bc5_encode(px, out, 0, o); }
 static void bc5_decode_u(const unsigned char *in, float *px) { bc5_decode(in, px, 0); }
-static void bc5_encode_s(const float *px, unsigned char *out) { bc5_encode(px, out, 1); }
+static void bc5_encode_s(const float *px, unsigned char *out, const tex_options *o) { bc5_encode(px, out, 1, o); }
 static void bc5_decode_s(const unsigned char *in, float *px) { bc5_decode(in, px, 1); }
 
 static const Codec BC5 = { bc5_encode_u, bc5_decode_u, 16 };

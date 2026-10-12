@@ -350,11 +350,11 @@ static void deep(Block *best, float *least, const vec *pixels) {
   }
 }
 
-static void bc7_encode(const float *in, unsigned char *out) {
+static void bc7_encode(const float *in, unsigned char *out, const tex_options *o) {
   vec pixels[16], px[16], ends[3][2];
   for (int i = 0; i < 16; i++) pixels[i] = mul(load(in + i * 4), splat(255));
-  for (int i = 0; i < 16; i++) weight[i] = mul(with(splat(clamp(in[i * 4 + 3], 1.0f / 64, 1)), 3, 1), load(tint));
-  for (int r = 0; r < (fast ? 1 : 4); r++) for (int i = 0; i < 16; i++) probe(&probes[r][i], rotate(pixels[i], r), weights_of(r, i));
+  for (int i = 0; i < 16; i++) weight[i] = mul(with(splat(clamp(in[i * 4 + 3], 1.0f / 64, 1)), 3, 1), tint(o));
+  for (int r = 0; r < (is_fast(o) ? 1 : 4); r++) for (int i = 0; i < 16; i++) probe(&probes[r][i], rotate(pixels[i], r), weights_of(r, i));
   Block best;
   float least = 1.0f / 0.0f;
   float s2[64];
@@ -368,7 +368,7 @@ static void bc7_encode(const float *in, unsigned char *out) {
   consider(&best, &least, 6, 0, 0, 0, pixels, ends, pixels);
   lines(&MODES[4], 0, pixels, ends);
   consider(&best, &least, 5, 0, 0, 0, pixels, ends, pixels);
-  if (fast) {
+  if (is_fast(o)) {
     pack(&best, out);
     return;
   }

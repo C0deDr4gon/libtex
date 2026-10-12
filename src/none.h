@@ -2,7 +2,7 @@
 
 #include "codec.h"
 
-static void none_encode(const float *px, unsigned char *out) {
+static void none_encode(const float *px, unsigned char *out, const tex_options *o) {
   copy(out, px, 256);
 }
 

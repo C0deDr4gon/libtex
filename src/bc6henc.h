@@ -272,11 +272,11 @@ static float slope(float h) {
   return lane(l, 1) - lane(l, 0);
 }
 
-static void weigh(const vec *px) {
+static void weigh(const vec *px, const tex_options *o) {
   vec top = splat(0);
   for (int i = 0; i < 16; i++) {
     vec g = vmake(slope(lane(px[i], 0)), slope(lane(px[i], 1)), slope(lane(px[i], 2)), 0);
-    weight6[i] = mul(mul(g, g), load(tint));
+    weight6[i] = mul(mul(g, g), tint(o));
     top = vmax(top, weight6[i]);
   }
   float t = lane(top, 0);
@@ -286,14 +286,14 @@ static void weigh(const vec *px) {
   for (int i = 0; i < 16; i++) probe(&probes6[i], px[i], weight6[i]);
 }
 
-static void encode6(const float *in, unsigned char *out, int sign) {
+static void encode6(const float *in, unsigned char *out, int sign, const tex_options *o) {
   vec px[16], ends[2][2];
   for (int i = 0; i < 16; i++) px[i] = vmake(to_half(in[i * 4], sign), to_half(in[i * 4 + 1], sign), to_half(in[i * 4 + 2], sign), 0);
-  weigh(px);
+  weigh(px, o);
   Block6 best;
   float least = 1.0f / 0.0f;
   found6 = 0;
-  if (fast) {
+  if (is_fast(o)) {
     float scores[32];
     spreads(px, 2, 32, scores);
     int p = 0;
@@ -318,9 +318,9 @@ static void encode6(const float *in, unsigned char *out, int sign) {
   pack6(&best, out);
 }
 
-static void bc6h_encode_u(const float *px, unsigned char *out) { encode6(px, out, 0); }
+static void bc6h_encode_u(const float *px, unsigned char *out, const tex_options *o) { encode6(px, out, 0, o); }
 static void bc6h_decode_u(const unsigned char *in, float *px) { bc6h_decode(in, px, 0); }
-static void bc6h_encode_s(const float *px, unsigned char *out) { encode6(px, out, 1); }
+static void bc6h_encode_s(const float *px, unsigned char *out, const tex_options *o) { encode6(px, out, 1, o); }
 static void bc6h_decode_s(const unsigned char *in, float *px) { bc6h_decode(in, px, 1); }
 
 static const Codec BC6H_UF16 = { bc6h_encode_u, bc6h_decode_u, 16 };

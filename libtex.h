@@ -2,12 +2,14 @@
 #define LIBTEX_H
 
 typedef enum { TEX_NONE, TEX_BC1, TEX_BC2, TEX_BC3, TEX_BC4, TEX_BC4_SNORM, TEX_BC5, TEX_BC5_SNORM, TEX_BC6H_UF16, TEX_BC6H_SF16, TEX_BC7 } tex_format;
+typedef enum { TEX_BEST, TEX_FAST } tex_quality;
+typedef struct { tex_quality quality; float weight[3]; } tex_options;
 
 int tex_block_size(tex_format id);
-int tex_encode(tex_format id, const float *src, int width, int height, unsigned char *out, float *dst);
+int tex_encode(tex_format id, const tex_options *o, const float *src, int width, int height, unsigned char *out, float *dst);
 void tex_decode(tex_format id, const unsigned char *in, int width, int height, float *dst);
 void tex_decode_blocks(tex_format id, const unsigned char *in, int count, float *out);
-void tex_score(const float *a, const float *b, int pixels, int channels, int hdr, double *out);
+void tex_score(const float *a, const float *b, int pixels, int channels, int hdr, const tex_options *o, double *out);
 
 void tex_mips(const float *src, int width, int height, float *out);
 void tex_premultiply(float *px, int count, int inverse);
