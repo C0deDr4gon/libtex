@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../libtex.h"
+#include "libtex.h"
 #include "vec.h"
 
 typedef struct {

@@ -36,16 +36,16 @@ void tex_half_plane(const float *px, int count, int k, unsigned short *out);
 
 #if defined(LIBTEX_IMPLEMENTATION) && !defined(LIBTEX_DONE)
 #define LIBTEX_DONE
-#include "src/roundtrip.h"
-#include "src/score.h"
-#include "src/mip.h"
-#include "src/alpha.h"
-#include "src/swizzle.h"
-#include "src/orient.h"
-#include "src/resize.h"
-#include "src/bytes.h"
-#include "src/png.h"
-#include "src/tga.h"
-#include "src/exr.h"
-#include "src/init.h"
+#include "roundtrip.h"
+#include "score.h"
+#include "mip.h"
+#include "alpha.h"
+#include "swizzle.h"
+#include "orient.h"
+#include "resize.h"
+#include "bytes.h"
+#include "png.h"
+#include "tga.h"
+#include "exr.h"
+#include "init.h"
 #endif
