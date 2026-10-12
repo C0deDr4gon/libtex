@@ -81,7 +81,8 @@ static void tga_pixel(const Tga *t, float *out, const unsigned char *s, int n, i
   out[3] = a / 255;
 }
 
-void tex_tga_read(const unsigned char *buf, int length, int pos, int rle, unsigned char *scratch, int width, int height, int n, int kind, int desc, const unsigned char *cmap, int cmap_bytes, int cmap_start, int alpha, int premultiplied, float *out) {
+static void tga_decode(const unsigned char *buf, int length, int pos, int rle, unsigned char *scratch, int width, int height, int n, int kind, int desc, const unsigned char *cmap, int cmap_bytes, int cmap_start, int cmap_count, int alpha, int premultiplied, float *out) {
+  static const unsigned char none[4] = { 0 };
   Tga t = { alpha, premultiplied };
   int quick = !premultiplied && (kind == 3 || n >= 3);
   int count = width * height;
@@ -110,7 +111,10 @@ void tex_tga_read(const unsigned char *buf, int length, int pos, int rle, unsign
     int dy = desc & 0x20 ? y : height - 1 - y;
     float *o = out + (dy * width + dx) * 4;
     const unsigned char *p = src + i * n;
-    if (kind == 1) tga_pixel(&t, o, cmap + ((n == 1 ? p[0] : p[0] | p[1] << 8) - cmap_start) * cmap_bytes, cmap_bytes, 0);
+    if (kind == 1) {
+      int k = (n == 1 ? p[0] : p[0] | p[1] << 8) - cmap_start;
+      tga_pixel(&t, o, k >= 0 && k < cmap_count ? cmap + k * cmap_bytes : none, cmap_bytes, 0);
+    }
     else if (quick) tga_fast(o, p, n, kind == 3, alpha);
     else tga_pixel(&t, o, p, n, kind == 3);
   }

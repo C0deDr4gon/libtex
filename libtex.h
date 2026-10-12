@@ -29,7 +29,8 @@ void tex_from_bytes(const unsigned char *in, int count, float *out);
 int tex_png_info(const unsigned char *bytes, int length, tex_info *info);
 int tex_png_read(const unsigned char *bytes, int length, float *out, void *scratch);
 void tex_png_rows(const float *px, int w, int h, int n, int depth, int mode, unsigned char *out, unsigned char *scratch);
-void tex_tga_read(const unsigned char *buf, int length, int pos, int rle, unsigned char *scratch, int width, int height, int n, int kind, int desc, const unsigned char *cmap, int cmap_bytes, int cmap_start, int alpha, int premultiplied, float *out);
+int tex_tga_info(const unsigned char *bytes, int length, tex_info *info);
+int tex_tga_read(const unsigned char *bytes, int length, float *out, void *scratch);
 int tex_tga_gray(const float *px, int count);
 int tex_tga_pixels(const float *px, int w, int h, int n, int rle, unsigned char *out, unsigned char *row);
 int tex_exr_info(const unsigned char *bytes, int length, tex_info *info);
@@ -49,7 +50,7 @@ void tex_half_plane(const float *px, int count, int k, unsigned short *out);
 #include "resize.h"
 #include "bytes.h"
 #include "pngfile.h"
-#include "tga.h"
+#include "tgafile.h"
 #include "exrfile.h"
 #include "init.h"
 #endif
