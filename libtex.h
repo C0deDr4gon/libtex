@@ -5,7 +5,7 @@ typedef enum { TEX_NONE, TEX_BC1, TEX_BC2, TEX_BC3, TEX_BC4, TEX_BC4_SNORM, TEX_
 typedef enum { TEX_BEST, TEX_FAST } tex_quality;
 typedef struct { tex_quality quality; float weight[3]; } tex_options;
 
-typedef enum { TEX_OK, TEX_ERROR_DATA, TEX_ERROR_COMPRESSION, TEX_ERROR_DEEP, TEX_ERROR_SUBSAMPLED } tex_error;
+typedef enum { TEX_OK, TEX_ERROR_FORMAT, TEX_ERROR_DATA, TEX_ERROR_COMPRESSION, TEX_ERROR_DEEP, TEX_ERROR_SUBSAMPLED } tex_error;
 typedef struct { int width, height, bits, compression, scratch; } tex_info;
 
 void tex_init(void);
@@ -25,7 +25,8 @@ int tex_resize_scratch(int w, int h, int nw, int nh, int filter);
 void tex_resize(const float *src, int w, int h, float *dst, int nw, int nh, int filter, void *scratch);
 void tex_to_bytes(const float *in, int count, unsigned char *out);
 
-void tex_png_read(unsigned char *raw, int width, int height, int depth, int color, int interlace, const unsigned char *palette, const unsigned char *trns, int trns_length, float *out);
+int tex_png_info(const unsigned char *bytes, int length, tex_info *info);
+int tex_png_read(const unsigned char *bytes, int length, float *out, void *scratch);
 void tex_png_rows(const float *px, int w, int h, int n, int depth, int mode, unsigned char *out, unsigned char *scratch);
 void tex_tga_read(const unsigned char *buf, int length, int pos, int rle, unsigned char *scratch, int width, int height, int n, int kind, int desc, const unsigned char *cmap, int cmap_bytes, int cmap_start, int alpha, int premultiplied, float *out);
 int tex_tga_gray(const float *px, int count);
@@ -46,7 +47,7 @@ void tex_half_plane(const float *px, int count, int k, unsigned short *out);
 #include "orient.h"
 #include "resize.h"
 #include "bytes.h"
-#include "png.h"
+#include "pngfile.h"
 #include "tga.h"
 #include "exrfile.h"
 #include "init.h"

@@ -56,7 +56,7 @@ static void png_pixel(const Png *p, float *out, const unsigned char *line, int x
   out[3] = a < 0 ? !key : p->depth <= 8 ? p->unit[a] : a / p->max;
 }
 
-void tex_png_read(unsigned char *raw, int width, int height, int depth, int color, int interlace, const unsigned char *palette, const unsigned char *trns, int trns_length, float *out) {
+static void png_decode(unsigned char *raw, int width, int height, int depth, int color, int interlace, const unsigned char *palette, const unsigned char *trns, int trns_length, float *out) {
   Png p = { color, depth, CHANNELS[color], (1 << depth) - 1, { 0 }, palette, trns, trns_length };
   for (int v = 0; v < 256; v++) p.unit[v] = v / p.max;
   int bpp = p.n * depth >> 3;

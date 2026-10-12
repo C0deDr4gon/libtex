@@ -102,7 +102,7 @@ static int chunk(const Exr *e, int i, Chunk *c) {
 static int exr_open(Exr *e, const unsigned char *b, int length) {
   zero(e, sizeof *e);
   e->b = b, e->length = length;
-  if (length < 8 || i32(b) != 20000630) return TEX_ERROR_DATA;
+  if (length < 8 || i32(b) != 20000630) return TEX_ERROR_FORMAT;
   int flags = i32(b + 4), pos;
   e->multipart = !!(flags & 0x1000);
   e->tiled = !e->multipart && (flags & 0x200);
