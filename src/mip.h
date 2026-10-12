@@ -9,8 +9,6 @@ typedef struct {
   int n;
 } Taps;
 
-static Taps xs[32768], ys[32768];
-
 static void taps(int src, int dst, Taps *out) {
   double r = (double)src / dst;
   for (int x = 0; x < dst; x++) {
@@ -26,7 +24,8 @@ static void taps(int src, int dst, Taps *out) {
   }
 }
 
-static void halve(const float *src, int width, int height, float *out, int w, int h) {
+static void halve(const float *src, int width, int height, float *out, int w, int h, Taps *xs) {
+  Taps *ys = xs + w;
   taps(width, w, xs);
   taps(height, h, ys);
   for (int y = 0; y < h; y++) {
@@ -48,10 +47,12 @@ static void halve(const float *src, int width, int height, float *out, int w, in
   }
 }
 
-void tex_mips(const float *src, int width, int height, float *out) {
+int tex_mips_scratch(int width, int height) { return ((width > 1 ? width >> 1 : 1) + (height > 1 ? height >> 1 : 1)) * sizeof(Taps); }
+
+void tex_mips(const float *src, int width, int height, float *out, void *scratch) {
   while (width > 1 || height > 1) {
     int w = width > 1 ? width >> 1 : 1, h = height > 1 ? height >> 1 : 1;
-    halve(src, width, height, out, w, h);
+    halve(src, width, height, out, w, h, scratch);
     src = out;
     out += w * h * 4;
     width = w;

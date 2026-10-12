@@ -1,7 +1,5 @@
 #pragma once
 
-static int piz(const unsigned char *data, int length, unsigned short *buf, unsigned char *out, int size, int width, int lines, const int *chans, int count);
-static void rows(const unsigned short *buf, unsigned char *out, int width, int lines, const int *chans, int count);
 
 #include "platform.h"
 
@@ -10,12 +8,12 @@ static void rows(const unsigned short *buf, unsigned char *out, int width, int l
 
 typedef unsigned long long u64;
 
-static unsigned char len[65537];
-static u64 code[65537];
-static unsigned char quick[DECSIZE];
-static int symbol[DECSIZE], head[DECSIZE], next[65537];
-static unsigned char bitmap[8192];
-static unsigned short lut[65536];
+typedef struct {
+  u64 code[65537];
+  int symbol[DECSIZE], head[DECSIZE], next[65537];
+  unsigned short lut[65536];
+  unsigned char len[65537], quick[DECSIZE], bitmap[8192];
+} Piz;
 
 typedef struct {
   const unsigned char *data;
@@ -55,22 +53,22 @@ static int emit(Bits *b, unsigned short *out, int *o, int count, int s, int im) 
   return 1;
 }
 
-static int huffman(const unsigned char *data, int length, unsigned short *out, int count) {
+static int huffman(Piz *z, const unsigned char *data, int length, unsigned short *out, int count) {
   if (length < 20) return 0;
   int im = data[0] | data[1] << 8 | data[2] << 16 | data[3] << 24;
   int iM = data[4] | data[5] << 8 | data[6] << 16 | data[7] << 24;
   int nbits = data[12] | data[13] << 8 | data[14] << 16 | data[15] << 24;
   if (im < 0 || iM > 65536 || im > iM) return 0;
   Bits b = { data, 20, length, 0, 0 };
-  zero(len, sizeof len);
+  zero(z->len, sizeof z->len);
   for (int i = im; i <= iM; i++) {
     int l = piz_bits(&b, 6);
     if (l == 63) i += piz_bits(&b, 8) + 5;
     else if (l >= 59) i += l - 58;
-    else len[i] = l;
+    else z->len[i] = l;
   }
   u64 counts[59] = { 0 };
-  for (int i = im; i <= iM; i++) counts[len[i]]++;
+  for (int i = im; i <= iM; i++) counts[z->len[i]]++;
   counts[0] = 0;
   u64 n = 0;
   for (int l = 58; l > 0; l--) {
@@ -78,18 +76,18 @@ static int huffman(const unsigned char *data, int length, unsigned short *out, i
     counts[l] = n;
     n = m;
   }
-  for (int i = im; i <= iM; i++) if (len[i]) code[i] = counts[len[i]]++;
-  zero(quick, sizeof quick);
-  for (int k = 0; k < DECSIZE; k++) head[k] = -1;
+  for (int i = im; i <= iM; i++) if (z->len[i]) z->code[i] = counts[z->len[i]]++;
+  zero(z->quick, sizeof z->quick);
+  for (int k = 0; k < DECSIZE; k++) z->head[k] = -1;
   for (int i = iM; i >= im; i--) {
-    int l = len[i];
+    int l = z->len[i];
     if (l > DECBITS) {
-      int k = code[i] >> (l - DECBITS) & (DECSIZE - 1);
-      next[i] = head[k];
-      head[k] = i;
+      int k = z->code[i] >> (l - DECBITS) & (DECSIZE - 1);
+      z->next[i] = z->head[k];
+      z->head[k] = i;
     } else if (l) {
-      int start = code[i] << (DECBITS - l);
-      for (int k = start; k < start + (1 << (DECBITS - l)); k++) quick[k] = l, symbol[k] = i;
+      int start = z->code[i] << (DECBITS - l);
+      for (int k = start; k < start + (1 << (DECBITS - l)); k++) z->quick[k] = l, z->symbol[k] = i;
     }
   }
   b.c = 0;
@@ -99,18 +97,18 @@ static int huffman(const unsigned char *data, int length, unsigned short *out, i
     fill(&b);
     while (b.lc >= DECBITS) {
       int k = b.c >> (b.lc - DECBITS) & (DECSIZE - 1);
-      if (quick[k]) {
-        piz_take(&b, quick[k]);
-        if (!emit(&b, out, &o, count, symbol[k], iM)) return 0;
+      if (z->quick[k]) {
+        piz_take(&b, z->quick[k]);
+        if (!emit(&b, out, &o, count, z->symbol[k], iM)) return 0;
         continue;
       }
-      int s = head[k];
-      for (; s >= 0; s = next[s]) {
-        while (b.lc < len[s] && b.p < end) fill(&b);
-        if (b.lc >= len[s] && (b.c >> (b.lc - len[s]) & ((1ull << len[s]) - 1)) == code[s]) break;
+      int s = z->head[k];
+      for (; s >= 0; s = z->next[s]) {
+        while (b.lc < z->len[s] && b.p < end) fill(&b);
+        if (b.lc >= z->len[s] && (b.c >> (b.lc - z->len[s]) & ((1ull << z->len[s]) - 1)) == z->code[s]) break;
       }
       if (s < 0) return 0;
-      piz_take(&b, len[s]);
+      piz_take(&b, z->len[s]);
       if (!emit(&b, out, &o, count, s, iM)) return 0;
     }
   }
@@ -119,9 +117,9 @@ static int huffman(const unsigned char *data, int length, unsigned short *out, i
   b.lc -= drop;
   while (b.lc > 0) {
     int k = b.c << (DECBITS - b.lc) & (DECSIZE - 1);
-    if (!quick[k] || quick[k] > b.lc) return 0;
-    piz_take(&b, quick[k]);
-    if (!emit(&b, out, &o, count, symbol[k], iM)) return 0;
+    if (!z->quick[k] || z->quick[k] > b.lc) return 0;
+    piz_take(&b, z->quick[k]);
+    if (!emit(&b, out, &o, count, z->symbol[k], iM)) return 0;
   }
   return 1;
 }
@@ -167,30 +165,6 @@ static void wavelet(unsigned short *buf, int start, int nx, int ox, int ny, int 
   }
 }
 
-static int piz(const unsigned char *data, int length, unsigned short *buf, unsigned char *out, int size, int width, int lines, const int *chans, int count) {
-  int min = data[0] | data[1] << 8, max = data[2] | data[3] << 8, p = 4;
-  zero(bitmap, sizeof bitmap);
-  if (min <= max) {
-    if (max >= 8192 || p + max - min + 1 > length) return 0;
-    for (int i = min; i <= max; i++) bitmap[i] = data[p++];
-  }
-  int k = 0;
-  for (int i = 0; i < 65536; i++) if (!i || bitmap[i >> 3] & 1 << (i & 7)) lut[k++] = i;
-  int n = data[p] | data[p + 1] << 8 | data[p + 2] << 16 | data[p + 3] << 24;
-  if (n < 0 || p + 4 + n > length) return 0;
-  zero(buf, size);
-  if (!huffman(data + p + 4, n, buf, size / 2)) return 0;
-  int at = 0;
-  for (int c = 0; c < count; c++) {
-    int n = chans[c * 2] == 1 ? 1 : 2;
-    for (int j = 0; j < n; j++) wavelet(buf, at + j, width, n, lines, width * n, k - 1);
-    at += width * lines * n;
-  }
-  for (int i = 0; i < size / 2; i++) buf[i] = lut[buf[i]];
-  rows(buf, out, width, lines, chans, count);
-  return 1;
-}
-
 static void rows(const unsigned short *buf, unsigned char *out, int width, int lines, const int *chans, int count) {
   int o = 0;
   for (int y = 0; y < lines; y++) {
@@ -205,4 +179,28 @@ static void rows(const unsigned short *buf, unsigned char *out, int width, int l
       at += width * lines * n;
     }
   }
+}
+
+static int piz(Piz *z, const unsigned char *data, int length, unsigned short *buf, unsigned char *out, int size, int width, int lines, const int *chans, int count) {
+  int min = data[0] | data[1] << 8, max = data[2] | data[3] << 8, p = 4;
+  zero(z->bitmap, sizeof z->bitmap);
+  if (min <= max) {
+    if (max >= 8192 || p + max - min + 1 > length) return 0;
+    for (int i = min; i <= max; i++) z->bitmap[i] = data[p++];
+  }
+  int k = 0;
+  for (int i = 0; i < 65536; i++) if (!i || z->bitmap[i >> 3] & 1 << (i & 7)) z->lut[k++] = i;
+  int n = data[p] | data[p + 1] << 8 | data[p + 2] << 16 | data[p + 3] << 24;
+  if (n < 0 || p + 4 + n > length) return 0;
+  zero(buf, size);
+  if (!huffman(z, data + p + 4, n, buf, size / 2)) return 0;
+  int at = 0;
+  for (int c = 0; c < count; c++) {
+    int n = chans[c * 2] == 1 ? 1 : 2;
+    for (int j = 0; j < n; j++) wavelet(buf, at + j, width, n, lines, width * n, k - 1);
+    at += width * lines * n;
+  }
+  for (int i = 0; i < size / 2; i++) buf[i] = z->lut[buf[i]];
+  rows(buf, out, width, lines, chans, count);
+  return 1;
 }

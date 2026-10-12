@@ -61,6 +61,8 @@ static float read(const unsigned char *p, int type, const float *half) {
   return half[p[0] | p[1] << 8];
 }
 
+int tex_exr_scratch(void) { return sizeof(Piz); }
+
 void tex_exr_fill(float *out, int count) {
   for (int i = 0; i < count; i++) {
     out[i * 4] = out[i * 4 + 1] = out[i * 4 + 2] = 0;
@@ -68,7 +70,7 @@ void tex_exr_fill(float *out, int count) {
   }
 }
 
-int tex_exr_chunk(int kind, unsigned char *src, int length, unsigned char *tmp, unsigned char *dst, int size, const int *chans, int count, float *out, int full, int x0, int y0, int width, int rows) {
+int tex_exr_chunk(int kind, unsigned char *src, int length, unsigned char *tmp, unsigned char *dst, int size, const int *chans, int count, float *out, int full, int x0, int y0, int width, int rows, void *scratch) {
   const unsigned char *data = src;
   if (kind == 1) {
     zero(tmp, size);
@@ -81,7 +83,7 @@ int tex_exr_chunk(int kind, unsigned char *src, int length, unsigned char *tmp, 
     data = dst;
   }
   if (kind == 3) {
-    if (!piz(src, length, (unsigned short *)tmp, dst, size, width, rows, chans, count)) return 0;
+    if (!scratch || !piz(scratch, src, length, (unsigned short *)tmp, dst, size, width, rows, chans, count)) return 0;
     data = dst;
   }
   if (kind == 4) {
@@ -92,7 +94,7 @@ int tex_exr_chunk(int kind, unsigned char *src, int length, unsigned char *tmp, 
     if (!b44(src, length, (unsigned short *)tmp, dst, width, rows, chans, count)) return 0;
     data = dst;
   }
-  const float *half = half_table();
+  const float *half = HALF;
   int pos = 0;
   for (int r = 0; r < rows; r++) {
     for (int c = 0; c < count; c++) {

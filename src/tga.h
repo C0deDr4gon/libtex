@@ -32,6 +32,10 @@ typedef struct {
 
 static float UNIT[256];
 
+static void tga_init(void) {
+  for (int v = 0; v < 256; v++) UNIT[v] = v / 255.0;
+}
+
 static void tga_fast(float *out, const unsigned char *s, int n, int gray, int alpha) {
   out[0] = UNIT[s[gray ? 0 : n >= 3 ? 2 : 0]];
   out[1] = UNIT[s[gray ? 0 : n >= 3 ? 1 : 0]];
@@ -79,7 +83,6 @@ static void tga_pixel(const Tga *t, float *out, const unsigned char *s, int n, i
 
 void tex_tga_read(const unsigned char *buf, int length, int pos, int rle, unsigned char *scratch, int width, int height, int n, int kind, int desc, const unsigned char *cmap, int cmap_bytes, int cmap_start, int alpha, int premultiplied, float *out) {
   Tga t = { alpha, premultiplied };
-  for (int v = 0; v < 256; v++) UNIT[v] = v / 255.0;
   int quick = !premultiplied && (kind == 3 || n >= 3);
   int count = width * height;
   int size = count * n;

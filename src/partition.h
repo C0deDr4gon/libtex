@@ -5,9 +5,8 @@
 #include "bc7tables.h"
 
 static ivec ONE[2][16][16], TWO[16][16];
-static int ready;
 
-static void init(void) {
+static void partition_init(void) {
   for (int g = 0; g < 16; g++) {
     for (int i = 0; i < 16; i++) {
       const unsigned char *a = &P2[g * 4][i], *b = &P3[g * 4][i];
@@ -16,7 +15,6 @@ static void init(void) {
       TWO[g][i] = imake(-(b[0] == 2), -(b[16] == 2), -(b[32] == 2), -(b[48] == 2));
     }
   }
-  ready = 1;
 }
 
 static vec part(const vec *s, vec n) {
@@ -25,7 +23,6 @@ static vec part(const vec *s, vec n) {
 }
 
 static void spreads(const vec *px, int ns, int count, float *out) {
-  if (!ready) init();
   ALIGN16 float p[64], c[4][16];
   vec total[4];
   for (int i = 0; i < 16; i++) store(p + i * 4, px[i]);

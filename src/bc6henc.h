@@ -9,8 +9,16 @@
 #include "partition.h"
 #include "bc7tables.h"
 
-static vec weight6[16];
-static Probe probes6[16];
+typedef struct {
+  vec weight6[16];
+  Probe probes6[16];
+  Pal held[2];
+  unsigned char held_idx6[16];
+  float held_d[16];
+  Block6 seen6[8];
+  float errors6[8];
+  int found6;
+} Enc6;
 
 static int value(int q, int bits, int sign) { return finish6(unquant6(q, bits, sign), sign); }
 
@@ -65,42 +73,38 @@ static void ramp6(const Mode6 *m, const int (*q)[3], int s, int sign, Pal *pal) 
   }
 }
 
-static float miss6(const Pal *pal, int j, vec p, int i) {
+static float miss6(Enc6 *x, const Pal *pal, int j, vec p, int i) {
   vec d = sub(vmake(pal->c[0][j], pal->c[1][j], pal->c[2][j], 0), p);
-  return hsum(mul(mul(d, d), weight6[i]));
+  return hsum(mul(mul(d, d), x->weight6[i]));
 }
 
-static Pal held[2];
-static unsigned char held_idx6[16];
-static float held_d[16];
-
-static void hold6(const Block6 *b, const vec *px, int sign) {
-  for (int s = 0; s < b->mode->ns; s++) ramp6(b->mode, b->q, s, sign, &held[s]);
+static void hold6(Enc6 *x, const Block6 *b, const vec *px, int sign) {
+  for (int s = 0; s < b->mode->ns; s++) ramp6(b->mode, b->q, s, sign, &x->held[s]);
   for (int i = 0; i < 16; i++) {
-    const Pal *pal = &held[subset6(b->mode, b->partition, i)];
-    held_idx6[i] = pick_p(&probes6[i], pal, 3);
-    held_d[i] = miss6(pal, held_idx6[i], px[i], i);
+    const Pal *pal = &x->held[subset6(b->mode, b->partition, i)];
+    x->held_idx6[i] = pick_p(&x->probes6[i], pal, 3);
+    x->held_d[i] = miss6(x, pal, x->held_idx6[i], px[i], i);
   }
 }
 
-static float assign6(Block6 *b, const vec *px, int sign, float limit, int fixed) {
+static float assign6(Enc6 *x, Block6 *b, const vec *px, int sign, float limit, int fixed) {
   const Mode6 *m = b->mode;
   int bits = m->ns == 2 ? 3 : 4, top = (1 << (bits - 1)) - 1;
   Pal own[2];
   const Pal *pals[2];
   for (int s = 0; s < m->ns; s++) {
-    pals[s] = s == fixed ? &held[s] : &own[s];
+    pals[s] = s == fixed ? &x->held[s] : &own[s];
     if (s != fixed) ramp6(m, b->q, s, sign, &own[s]);
   }
   float e = 0;
   for (int i = 0; i < 16; i++) {
     int s = subset6(m, b->partition, i);
     if (s == fixed) {
-      b->idx[i] = held_idx6[i];
-      e += held_d[i];
+      b->idx[i] = x->held_idx6[i];
+      e += x->held_d[i];
     } else {
-      b->idx[i] = pick_p(&probes6[i], pals[s], 3);
-      e += miss6(pals[s], b->idx[i], px[i], i);
+      b->idx[i] = pick_p(&x->probes6[i], pals[s], 3);
+      e += miss6(x, pals[s], b->idx[i], px[i], i);
     }
     if (e > limit) return e;
   }
@@ -130,12 +134,12 @@ static float assign6(Block6 *b, const vec *px, int sign, float limit, int fixed)
   e = 0;
   for (int i = 0; i < 16; i++) {
     int s = subset6(m, b->partition, i), j = flipped[s] ? (1 << bits) - 1 - b->idx[i] : b->idx[i];
-    e += miss6(pals[s], j, px[i], i);
+    e += miss6(x, pals[s], j, px[i], i);
   }
   return e;
 }
 
-static float build6(Block6 *b, const Mode6 *m, int partition, const vec *px, int sign, vec ends[2][2], float limit) {
+static float build6(Enc6 *x, Block6 *b, const Mode6 *m, int partition, const vec *px, int sign, vec ends[2][2], float limit) {
   b->mode = m;
   b->partition = partition;
   for (int s = 0; s < m->ns; s++) {
@@ -150,7 +154,7 @@ static float build6(Block6 *b, const Mode6 *m, int partition, const vec *px, int
       b->q[e][k] = b->q[0][k] + (int)clamp(b->q[e][k] - b->q[0][k], -lim, lim - 1);
     }
   }
-  return assign6(b, px, sign, limit, -1);
+  return assign6(x, b, px, sign, limit, -1);
 }
 
 static void lines6(const Mode6 *m, int partition, const vec *px, vec ends[2][2]) {
@@ -167,19 +171,15 @@ static void lines6(const Mode6 *m, int partition, const vec *px, vec ends[2][2])
   }
 }
 
-static Block6 seen6[8];
-static float errors6[8];
-static int found6;
-
-static void consider6(Block6 *best, float *least, const Mode6 *m, int partition, const vec *px, int sign, vec ends[2][2]) {
+static void consider6(Enc6 *x, Block6 *best, float *least, const Mode6 *m, int partition, const vec *px, int sign, vec ends[2][2]) {
   Block6 b;
-  float e = build6(&b, m, partition, px, sign, ends, found6 == 8 ? errors6[7] : 1.0f / 0.0f);
-  int at = rank(errors6, &found6, 8, e, seen6, sizeof(Block6));
-  if (at >= 0) seen6[at] = b;
+  float e = build6(x, &b, m, partition, px, sign, ends, x->found6 == 8 ? x->errors6[7] : 1.0f / 0.0f);
+  int at = rank(x->errors6, &x->found6, 8, e, x->seen6, sizeof(Block6));
+  if (at >= 0) x->seen6[at] = b;
   if (e < *least) *least = e, *best = b;
 }
 
-static void refit6(Block6 *b, float *e, const vec *px, int sign) {
+static void refit6(Enc6 *x, Block6 *b, float *e, const vec *px, int sign) {
   const int *w = weights(b->mode->ns == 2 ? 3 : 4);
   for (int r = 0; r < 2; r++) {
     vec ends[2][2];
@@ -187,11 +187,11 @@ static void refit6(Block6 *b, float *e, const vec *px, int sign) {
     int ok = 1;
     for (int s = 0; s < b->mode->ns && ok; s++) {
       members(b, s, in);
-      ok = lsq(px, weight6, in, b->idx, w, &ends[s][0], &ends[s][1]);
+      ok = lsq(px, x->weight6, in, b->idx, w, &ends[s][0], &ends[s][1]);
     }
     if (!ok) return;
     Block6 c;
-    float f = build6(&c, b->mode, b->partition, px, sign, ends, *e);
+    float f = build6(x, &c, b->mode, b->partition, px, sign, ends, *e);
     if (f >= *e) return;
     *b = c, *e = f;
   }
@@ -214,53 +214,53 @@ static void start6(const Block6 *b, const vec *px, int kind, vec ends[2][2]) {
   }
 }
 
-static void polish6(Block6 *best, float *least, const vec *px, int sign) {
-  for (int k = 0; k < found6; k++) {
-    refit6(&seen6[k], &errors6[k], px, sign);
+static void polish6(Enc6 *x, Block6 *best, float *least, const vec *px, int sign) {
+  for (int k = 0; k < x->found6; k++) {
+    refit6(x, &x->seen6[k], &x->errors6[k], px, sign);
     for (int kind = 0; kind < 5; kind++) {
       vec ends[2][2];
       Block6 c;
-      start6(&seen6[k], px, kind, ends);
-      float f = build6(&c, seen6[k].mode, seen6[k].partition, px, sign, ends, 1.0f / 0.0f);
-      refit6(&c, &f, px, sign);
-      if (f < errors6[k]) seen6[k] = c, errors6[k] = f;
+      start6(&x->seen6[k], px, kind, ends);
+      float f = build6(x, &c, x->seen6[k].mode, x->seen6[k].partition, px, sign, ends, 1.0f / 0.0f);
+      refit6(x, &c, &f, px, sign);
+      if (f < x->errors6[k]) x->seen6[k] = c, x->errors6[k] = f;
     }
-    if (errors6[k] < *least) *least = errors6[k], *best = seen6[k];
+    if (x->errors6[k] < *least) *least = x->errors6[k], *best = x->seen6[k];
   }
 }
 
-static int try(Block6 *best, float *least, Block6 *t, const vec *px, int sign, int s) {
+static int try(Enc6 *x, Block6 *best, float *least, Block6 *t, const vec *px, int sign, int s) {
   if (!valid(t->mode, t->q, sign)) return 0;
-  float f = assign6(t, px, sign, *least, t->mode->ns == 2 ? 1 - s : -1);
+  float f = assign6(x, t, px, sign, *least, t->mode->ns == 2 ? 1 - s : -1);
   if (f >= *least) return 0;
   *least = f, *best = *t;
-  hold6(best, px, sign);
+  hold6(x, best, px, sign);
   return 1;
 }
 
-static int step6(Block6 *best, float *least, const vec *px, int sign) {
+static int step6(Enc6 *x, Block6 *best, float *least, const vec *px, int sign) {
   static const int PAIRS[4][2] = { { 1, 1 }, { -1, -1 }, { 1, -1 }, { -1, 1 } };
   int ns = best->mode->ns, better = 0;
-  hold6(best, px, sign);
+  hold6(x, best, px, sign);
   for (int e = 0; e < ns * 2; e++) for (int k = 0; k < 3; k++) for (int d = -1; d <= 1; d += 2) {
     Block6 t = *best;
     t.q[e][k] += d;
-    better |= try(best, least, &t, px, sign, e >> 1);
+    better |= try(x, best, least, &t, px, sign, e >> 1);
   }
   for (int s = 0; s < ns; s++) for (int k = 0; k < 3; k++) for (int p = 0; p < 4; p++) {
     Block6 t = *best;
     t.q[s * 2][k] += PAIRS[p][0];
     t.q[s * 2 + 1][k] += PAIRS[p][1];
-    better |= try(best, least, &t, px, sign, s);
+    better |= try(x, best, least, &t, px, sign, s);
   }
   return better;
 }
 
-static void deep6(Block6 *best, float *least, const vec *px, int sign) {
-  for (int k = 0; k < found6; k++) {
-    Block6 b = seen6[k];
-    float e = errors6[k];
-    for (int r = 0; r < 12 && step6(&b, &e, px, sign); r++) {}
+static void deep6(Enc6 *x, Block6 *best, float *least, const vec *px, int sign) {
+  for (int k = 0; k < x->found6; k++) {
+    Block6 b = x->seen6[k];
+    float e = x->errors6[k];
+    for (int r = 0; r < 12 && step6(x, &b, &e, px, sign); r++) {}
     if (e < *least) *least = e, *best = b;
   }
 }
@@ -272,27 +272,28 @@ static float slope(float h) {
   return lane(l, 1) - lane(l, 0);
 }
 
-static void weigh(const vec *px, const tex_options *o) {
+static void weigh(Enc6 *x, const vec *px, const tex_options *o) {
   vec top = splat(0);
   for (int i = 0; i < 16; i++) {
     vec g = vmake(slope(lane(px[i], 0)), slope(lane(px[i], 1)), slope(lane(px[i], 2)), 0);
-    weight6[i] = mul(mul(g, g), tint(o));
-    top = vmax(top, weight6[i]);
+    x->weight6[i] = mul(mul(g, g), tint(o));
+    top = vmax(top, x->weight6[i]);
   }
   float t = lane(top, 0);
   if (lane(top, 1) > t) t = lane(top, 1);
   if (lane(top, 2) > t) t = lane(top, 2);
-  for (int i = 0; i < 16; i++) weight6[i] = mul(weight6[i], splat(1 / t));
-  for (int i = 0; i < 16; i++) probe(&probes6[i], px[i], weight6[i]);
+  for (int i = 0; i < 16; i++) x->weight6[i] = mul(x->weight6[i], splat(1 / t));
+  for (int i = 0; i < 16; i++) probe(&x->probes6[i], px[i], x->weight6[i]);
 }
 
 static void encode6(const float *in, unsigned char *out, int sign, const tex_options *o) {
+  Enc6 ctx, *x = &ctx;
   vec px[16], ends[2][2];
   for (int i = 0; i < 16; i++) px[i] = vmake(to_half(in[i * 4], sign), to_half(in[i * 4 + 1], sign), to_half(in[i * 4 + 2], sign), 0);
-  weigh(px, o);
+  weigh(x, px, o);
   Block6 best;
   float least = 1.0f / 0.0f;
-  found6 = 0;
+  x->found6 = 0;
   if (is_fast(o)) {
     float scores[32];
     spreads(px, 2, 32, scores);
@@ -302,19 +303,19 @@ static void encode6(const float *in, unsigned char *out, int sign, const tex_opt
     for (int k = 0; k < 7; k++) {
       const Mode6 *m = &MODES6[FAST[k]];
       lines6(m, m->ns == 2 ? p : 0, px, ends);
-      consider6(&best, &least, m, m->ns == 2 ? p : 0, px, sign, ends);
+      consider6(x, &best, &least, m, m->ns == 2 ? p : 0, px, sign, ends);
     }
     pack6(&best, out);
     return;
   }
   lines6(&MODES6[10], 0, px, ends);
-  for (int i = 10; i < 14; i++) consider6(&best, &least, &MODES6[i], 0, px, sign, ends);
+  for (int i = 10; i < 14; i++) consider6(x, &best, &least, &MODES6[i], 0, px, sign, ends);
   for (int p = 0; p < 32; p++) {
     lines6(&MODES6[0], p, px, ends);
-    for (int i = 0; i < 10; i++) consider6(&best, &least, &MODES6[i], p, px, sign, ends);
+    for (int i = 0; i < 10; i++) consider6(x, &best, &least, &MODES6[i], p, px, sign, ends);
   }
-  polish6(&best, &least, px, sign);
-  deep6(&best, &least, px, sign);
+  polish6(x, &best, &least, px, sign);
+  deep6(x, &best, &least, px, sign);
   pack6(&best, out);
 }
 

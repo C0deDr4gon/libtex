@@ -9,13 +9,15 @@ static void decode_color(const unsigned char *in, float *px, int punch);
 #include "codec.h"
 
 typedef struct {
+  vec color_weight[16];
+  unsigned char opaque[16];
+} Enc1;
+
+typedef struct {
   int c0, c1, four;
   unsigned char idx[16];
   float error;
 } Try;
-
-static vec color_weight[16];
-static unsigned char opaque[16];
 
 static int q(float v, int max) { return (int)fround(clamp(v, 0, 1) * max); }
 
@@ -33,7 +35,7 @@ static void palette(int c0, int c1, int four, vec *pal) {
   pal[3] = four ? add(pal[0], mul(d, splat(2.0f / 3))) : splat(0);
 }
 
-static Try make(const vec *pixels, int c0, int c1, int three, int punch) {
+static Try make(Enc1 *x, const vec *pixels, int c0, int c1, int three, int punch) {
   Try t;
   t.c0 = c0;
   t.c1 = c1;
@@ -50,31 +52,31 @@ static Try make(const vec *pixels, int c0, int c1, int three, int punch) {
   for (int i = 0; i < set.count; i++) pal_set(&set, i, pal[i]);
   t.error = 0;
   for (int i = 0; i < 16; i++) {
-    if (!opaque[i]) {
+    if (!x->opaque[i]) {
       t.idx[i] = 3;
       continue;
     }
-    t.idx[i] = pick_w(pixels[i], color_weight[i], &set, 3);
+    t.idx[i] = pick_w(pixels[i], x->color_weight[i], &set, 3);
     vec d = keep(sub(pixels[i], pal[t.idx[i]]), mask(3));
-    t.error += hsum(mul(mul(d, d), color_weight[i]));
+    t.error += hsum(mul(mul(d, d), x->color_weight[i]));
   }
   return t;
 }
 
-static Try color_fit(const vec *pixels, vec a, vec b, int three, int punch) {
-  return make(pixels, to565(a), to565(b), three, punch);
+static Try color_fit(Enc1 *x, const vec *pixels, vec a, vec b, int three, int punch) {
+  return make(x, pixels, to565(a), to565(b), three, punch);
 }
 
-static int refine(const vec *pixels, const Try *t, vec *a, vec *b) {
+static int refine(Enc1 *x, const vec *pixels, const Try *t, vec *a, vec *b) {
   float ts[4] = { 0, 1, t->four ? 1.0f / 3 : 1.0f / 2, 2.0f / 3 };
-  return lsqf(pixels, color_weight, opaque, t->idx, ts, a, b);
+  return lsqf(pixels, x->color_weight, x->opaque, t->idx, ts, a, b);
 }
 
-static Try color_line(const vec *pixels, vec a, vec b, int three, int punch, int rounds) {
-  Try best = color_fit(pixels, a, b, three, punch), last = best;
+static Try color_line(Enc1 *x, const vec *pixels, vec a, vec b, int three, int punch, int rounds) {
+  Try best = color_fit(x, pixels, a, b, three, punch), last = best;
   for (int i = 0; i < rounds; i++) {
-    if (!refine(pixels, &last, &a, &b)) break;
-    last = color_fit(pixels, a, b, three, punch);
+    if (!refine(x, pixels, &last, &a, &b)) break;
+    last = color_fit(x, pixels, a, b, three, punch);
     if (last.error < best.error) best = last;
   }
   return best;
@@ -87,20 +89,20 @@ static int moved(int c, int k, int d) {
   return (c & ~(MAX[k] << SHIFT[k])) | v << SHIFT[k];
 }
 
-static void color_nudge(const vec *pixels, Try *best, int three, int punch) {
+static void color_nudge(Enc1 *x, const vec *pixels, Try *best, int three, int punch) {
   static const int PAIRS[4][2] = { { 1, 1 }, { -1, -1 }, { 1, -1 }, { -1, 1 } };
   for (int round = 0; round < 16; round++) {
     int better = 0;
     for (int e = 0; e < 2; e++) for (int k = 0; k < 3; k++) for (int d = -1; d <= 1; d += 2) {
       int c = moved(e ? best->c1 : best->c0, k, d);
       if (c < 0) continue;
-      Try t = make(pixels, e ? best->c0 : c, e ? c : best->c1, three, punch);
+      Try t = make(x, pixels, e ? best->c0 : c, e ? c : best->c1, three, punch);
       if (t.error < best->error) *best = t, better = 1;
     }
     for (int k = 0; k < 3; k++) for (int p = 0; p < 4; p++) {
       int u = moved(best->c0, k, PAIRS[p][0]), v = moved(best->c1, k, PAIRS[p][1]);
       if (u < 0 || v < 0) continue;
-      Try t = make(pixels, u, v, three, punch);
+      Try t = make(x, pixels, u, v, three, punch);
       if (t.error < best->error) *best = t, better = 1;
     }
     if (!better) break;
@@ -108,6 +110,7 @@ static void color_nudge(const vec *pixels, Try *best, int three, int punch) {
 }
 
 static void encode_color(const float *px, unsigned char *out, int punch, const tex_options *o) {
+  Enc1 ctx, *x = &ctx;
   vec pixels[16], pts[16], a = splat(0), b = splat(0);
   int count = 0, transparent = 0;
   for (int i = 0; i < 16; i++) {
@@ -115,13 +118,13 @@ static void encode_color(const float *px, unsigned char *out, int punch, const t
     transparent |= punch && px[i * 4 + 3] < 0.5f;
   }
   for (int i = 0; i < 16; i++) {
-    opaque[i] = !transparent || px[i * 4 + 3] >= 0.5f;
+    x->opaque[i] = !transparent || px[i * 4 + 3] >= 0.5f;
     float w = punch ? 1 : clamp(px[i * 4 + 3], 1.0f / 64, 1);
-    color_weight[i] = mul(vmake(w, w, w, 1), tint(o));
-    if (opaque[i]) pts[count++] = pixels[i];
+    x->color_weight[i] = mul(vmake(w, w, w, 1), tint(o));
+    if (x->opaque[i]) pts[count++] = pixels[i];
   }
   if (count) endpoints(pts, count, 3, &a, &b);
-  Try best = color_line(pixels, a, b, transparent, punch, count ? 2 : 0);
+  Try best = color_line(x, pixels, a, b, transparent, punch, count ? 2 : 0);
   if (is_fast(o) || !count) {
     int pos = put(out, 0, best.c0, 16);
     pos = put(out, pos, best.c1, 16);
@@ -139,15 +142,15 @@ static void encode_color(const float *px, unsigned char *out, int punch, const t
         s = add(a, d), z = sub(b, d);
       }
       if (kind > 1) corner(pts, count, kind - 2, &s, &z);
-      Try t = color_line(pixels, s, z, three, punch, 2);
+      Try t = color_line(x, pixels, s, z, three, punch, 2);
       int at = rank(errors, &found, 4, t.error, seen, sizeof(Try));
       if (at >= 0) seen[at] = t;
     }
   }
-  color_nudge(pixels, &best, transparent, punch);
+  color_nudge(x, pixels, &best, transparent, punch);
   for (int k = 0; k < found; k++) {
     int three = punch && !seen[k].four;
-    color_nudge(pixels, &seen[k], three, punch);
+    color_nudge(x, pixels, &seen[k], three, punch);
     if (seen[k].error < best.error) best = seen[k];
   }
   int pos = put(out, 0, best.c0, 16);

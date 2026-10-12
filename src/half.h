@@ -2,7 +2,6 @@
 
 static int to_half(double v, int sign);
 static double from_half(int h);
-static const float *half_table(void);
 
 #include "platform.h"
 
@@ -37,9 +36,8 @@ static double unhalf(int h) {
 
 static float HALF[65536];
 
-static const float *half_table(void) {
-  if (HALF[0x3c00] != 1) for (int h = 0; h < 65536; h++) HALF[h] = h & 0x8000 ? -unhalf(h & 0x7fff) : unhalf(h);
-  return HALF;
+static void half_init(void) {
+  for (int h = 0; h < 65536; h++) HALF[h] = h & 0x8000 ? -unhalf(h & 0x7fff) : unhalf(h);
 }
 
 static int to_half(double v, int sign) {
