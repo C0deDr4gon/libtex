@@ -27,13 +27,19 @@ typedef struct {
   float *weights;
 } Plan;
 
-static int plan(int in, int out, int filter, Plan *p) {
+static int tap_count(int in, int out, int filter) {
+  double scale = (double)in / out, fs = scale > 1 ? scale : 1;
+  return (int)(2 * SUPPORT[filter] * fs) + 3;
+}
+
+static int plan_size(int in, int out, int filter) { return out * (2 + tap_count(in, out, filter)) * 4; }
+
+static char *plan(int in, int out, int filter, Plan *p, char *at) {
   double scale = (double)in / out, fs = scale > 1 ? scale : 1, radius = SUPPORT[filter] * fs;
-  p->taps = (int)(2 * radius) + 3;
-  p->first = alloc(out * 4);
-  p->count = alloc(out * 4);
-  p->weights = alloc(out * p->taps * 4);
-  if (!p->first || !p->count || !p->weights) return 0;
+  p->taps = tap_count(in, out, filter);
+  p->first = (int *)at;
+  p->count = p->first + out;
+  p->weights = (float *)(p->count + out);
   for (int o = 0; o < out; o++) {
     double c = (o + 0.5) * scale - 0.5, sum = 0;
     int lo = (int)ffloor(c - radius), n = 0;
@@ -43,15 +49,19 @@ static int plan(int in, int out, int filter, Plan *p) {
     p->first[o] = lo;
     p->count[o] = n;
   }
-  return 1;
+  return at + plan_size(in, out, filter);
 }
 
 static int edge(int i, int n) { return i < 0 ? 0 : i >= n ? n - 1 : i; }
 
-int tex_resize(const float *src, int w, int h, float *dst, int nw, int nh, int filter) {
+int tex_resize_scratch(int w, int h, int nw, int nh, int filter) {
+  return nw * h * 16 + plan_size(w, nw, filter) + plan_size(h, nh, filter);
+}
+
+void tex_resize(const float *src, int w, int h, float *dst, int nw, int nh, int filter, void *scratch) {
   Plan x, y;
-  float *tmp = alloc(nw * h * 16);
-  if (!tmp || !plan(w, nw, filter, &x) || !plan(h, nh, filter, &y)) return 0;
+  float *tmp = scratch;
+  plan(h, nh, filter, &y, plan(w, nw, filter, &x, (char *)scratch + nw * h * 16));
   for (int r = 0; r < h; r++) {
     for (int o = 0; o < nw; o++) {
       vec s = splat(0);
@@ -68,5 +78,4 @@ int tex_resize(const float *src, int w, int h, float *dst, int nw, int nh, int f
       store(dst + (o * nw + c) * 4, s);
     }
   }
-  return 1;
 }

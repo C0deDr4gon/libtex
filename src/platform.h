@@ -12,5 +12,3 @@ static inline double fnan(void) { return __builtin_nan(""); }
 static inline double finf(void) { return __builtin_inf(); }
 static inline void copy(void *d, const void *s, unsigned n) { __builtin_memcpy(d, s, n); }
 static inline void zero(void *d, unsigned n) { __builtin_memset(d, 0, n); }
-
-void *alloc(unsigned size);

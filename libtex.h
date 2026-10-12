@@ -15,7 +15,8 @@ void tex_mips(const float *src, int width, int height, float *out);
 void tex_premultiply(float *px, int count, int inverse);
 void tex_swizzle(float *px, int count, const int *src, const float *scale, const float *offset);
 void tex_orient(const float *src, int w, int h, float *dst, int op);
-int tex_resize(const float *src, int w, int h, float *dst, int nw, int nh, int filter);
+int tex_resize_scratch(int w, int h, int nw, int nh, int filter);
+void tex_resize(const float *src, int w, int h, float *dst, int nw, int nh, int filter, void *scratch);
 void tex_to_bytes(const float *in, int count, unsigned char *out);
 
 void tex_png_read(unsigned char *raw, int width, int height, int depth, int color, int interlace, const unsigned char *palette, const unsigned char *trns, int trns_length, float *out);
