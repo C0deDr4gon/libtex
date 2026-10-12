@@ -1,8 +1,10 @@
-#include "base.h"
+#pragma once
+
+#include "platform.h"
 #include "vec.h"
 #include "codec.h"
 
-EXPORT("score") void score(const float *a, const float *b, int pixels, int channels, int hdr, double *out) {
+void tex_score(const float *a, const float *b, int pixels, int channels, int hdr, double *out) {
   ivec lanes = mask(channels);
   dvec sum = dsplat(0);
   vec peak = splat(0);

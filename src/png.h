@@ -1,4 +1,6 @@
-#include "base.h"
+#pragma once
+
+#include "platform.h"
 
 static const int CHANNELS[7] = { 1, 0, 3, 1, 2, 0, 4 };
 static const int ADAM7[7][4] = { { 0, 0, 8, 8 }, { 4, 0, 8, 8 }, { 0, 4, 4, 8 }, { 2, 0, 4, 4 }, { 0, 2, 2, 4 }, { 1, 0, 2, 2 }, { 0, 1, 1, 2 } };
@@ -36,7 +38,7 @@ typedef struct {
   int trns_length;
 } Png;
 
-static void pixel(const Png *p, float *out, const unsigned char *line, int x) {
+static void png_pixel(const Png *p, float *out, const unsigned char *line, int x) {
   if (p->color == 3) {
     int i = sample(line, x, p->depth);
     for (int k = 0; k < 3; k++) out[k] = p->palette[i * 3 + k] / 255.0;
@@ -54,7 +56,7 @@ static void pixel(const Png *p, float *out, const unsigned char *line, int x) {
   out[3] = a < 0 ? !key : p->depth <= 8 ? p->unit[a] : a / p->max;
 }
 
-EXPORT("png") void png(unsigned char *raw, int width, int height, int depth, int color, int interlace, const unsigned char *palette, const unsigned char *trns, int trns_length, float *out) {
+void tex_png_read(unsigned char *raw, int width, int height, int depth, int color, int interlace, const unsigned char *palette, const unsigned char *trns, int trns_length, float *out) {
   Png p = { color, depth, CHANNELS[color], (1 << depth) - 1, { 0 }, palette, trns, trns_length };
   for (int v = 0; v < 256; v++) p.unit[v] = v / p.max;
   int bpp = p.n * depth >> 3;
@@ -71,7 +73,7 @@ EXPORT("png") void png(unsigned char *raw, int width, int height, int depth, int
       unsigned char *line = raw + off + 1;
       unfilter(raw[off], line, prev, stride, bpp);
       off += 1 + stride;
-      for (int x = 0; x < pw; x++) pixel(&p, out + ((y0 + y * dy) * width + x0 + x * dx) * 4, line, x);
+      for (int x = 0; x < pw; x++) png_pixel(&p, out + ((y0 + y * dy) * width + x0 + x * dx) * 4, line, x);
       prev = line;
     }
   }
@@ -83,7 +85,7 @@ static int filter(int f, const unsigned char *cur, const unsigned char *prev, in
   return (cur[i] - p) & 255;
 }
 
-EXPORT("png_rows") void png_rows(const float *px, int w, int h, int n, int depth, int mode, unsigned char *out, unsigned char *scratch) {
+void tex_png_rows(const float *px, int w, int h, int n, int depth, int mode, unsigned char *out, unsigned char *scratch) {
   int size = depth / 8, stride = w * n * size, bpp = n * size;
   double max = depth == 16 ? 65535 : 255;
   unsigned char *prev = scratch, *cur = scratch + stride;
@@ -91,7 +93,7 @@ EXPORT("png_rows") void png_rows(const float *px, int w, int h, int n, int depth
   for (int y = 0; y < h; y++) {
     for (int x = 0; x < w; x++) {
       for (int k = 0; k < n; k++) {
-        int v = (int)round(clamp(px[(y * w + x) * 4 + k], 0, 1) * max), at = (x * n + k) * size;
+        int v = (int)fround(clamp(px[(y * w + x) * 4 + k], 0, 1) * max), at = (x * n + k) * size;
         if (size == 2) cur[at] = v >> 8, cur[at + 1] = v & 255;
         else cur[at] = v;
       }

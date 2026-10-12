@@ -1,7 +1,9 @@
-#include "base.h"
+#pragma once
+
+#include "platform.h"
 #include "vec.h"
 
-static void unrle(const unsigned char *buf, int length, int pos, unsigned char *out, int size, int n) {
+static void tga_unrle(const unsigned char *buf, int length, int pos, unsigned char *out, int size, int n) {
   int o = 0;
   while (o < size && pos < length) {
     int h = buf[pos++];
@@ -30,7 +32,7 @@ typedef struct {
 
 static float UNIT[256];
 
-static void fast(float *out, const unsigned char *s, int n, int gray, int alpha) {
+static void tga_fast(float *out, const unsigned char *s, int n, int gray, int alpha) {
   out[0] = UNIT[s[gray ? 0 : n >= 3 ? 2 : 0]];
   out[1] = UNIT[s[gray ? 0 : n >= 3 ? 1 : 0]];
   out[2] = UNIT[s[0]];
@@ -41,7 +43,7 @@ static vec unit(ivec b) {
   return vdiv(tofloatu(bytes4(b)), splat(255));
 }
 
-static int line(float *o, const unsigned char *p, int width, int n, int alpha, int room) {
+static int tga_line(float *o, const unsigned char *p, int width, int n, int alpha, int room) {
   int x = 0;
   for (; x + 4 <= width && x * n + 16 <= room; x += 4, p += 4 * n, o += 16) {
     ivec b = iload(p);
@@ -54,7 +56,7 @@ static int line(float *o, const unsigned char *p, int width, int n, int alpha, i
   return x;
 }
 
-static void pixel(const Tga *t, float *out, const unsigned char *s, int n, int gray) {
+static void tga_pixel(const Tga *t, float *out, const unsigned char *s, int n, int gray) {
   double r = s[0], g = s[0], b = s[0];
   double a = n == 2 && t->alpha ? s[1] : 255;
   if (!gray && n >= 3) {
@@ -75,7 +77,7 @@ static void pixel(const Tga *t, float *out, const unsigned char *s, int n, int g
   out[3] = a / 255;
 }
 
-EXPORT("tga") void tga(const unsigned char *buf, int length, int pos, int rle, unsigned char *scratch, int width, int height, int n, int kind, int desc, const unsigned char *cmap, int cmap_bytes, int cmap_start, int alpha, int premultiplied, float *out) {
+void tex_tga_read(const unsigned char *buf, int length, int pos, int rle, unsigned char *scratch, int width, int height, int n, int kind, int desc, const unsigned char *cmap, int cmap_bytes, int cmap_start, int alpha, int premultiplied, float *out) {
   Tga t = { alpha, premultiplied };
   for (int v = 0; v < 256; v++) UNIT[v] = v / 255.0;
   int quick = !premultiplied && (kind == 3 || n >= 3);
@@ -83,8 +85,8 @@ EXPORT("tga") void tga(const unsigned char *buf, int length, int pos, int rle, u
   int size = count * n;
   const unsigned char *src = buf + pos;
   if (rle || pos + size > length) {
-    __builtin_memset(scratch, 0, size);
-    if (rle) unrle(buf, length, pos, scratch, size, n);
+    zero(scratch, size);
+    if (rle) tga_unrle(buf, length, pos, scratch, size, n);
     else for (int i = 0; pos + i < length; i++) scratch[i] = buf[pos + i];
     src = scratch;
   }
@@ -93,8 +95,8 @@ EXPORT("tga") void tga(const unsigned char *buf, int length, int pos, int rle, u
     for (int y = 0; y < height; y++) {
       float *o = out + (desc & 0x20 ? y : height - 1 - y) * width * 4;
       const unsigned char *p = src + y * width * n;
-      int x = line(o, p, width, n, alpha, size - y * width * n);
-      for (; x < width; x++) fast(o + x * 4, p + x * n, n, kind == 3, alpha);
+      int x = tga_line(o, p, width, n, alpha, size - y * width * n);
+      for (; x < width; x++) tga_fast(o + x * 4, p + x * n, n, kind == 3, alpha);
     }
     return;
   }
@@ -105,20 +107,20 @@ EXPORT("tga") void tga(const unsigned char *buf, int length, int pos, int rle, u
     int dy = desc & 0x20 ? y : height - 1 - y;
     float *o = out + (dy * width + dx) * 4;
     const unsigned char *p = src + i * n;
-    if (kind == 1) pixel(&t, o, cmap + ((n == 1 ? p[0] : p[0] | p[1] << 8) - cmap_start) * cmap_bytes, cmap_bytes, 0);
-    else if (quick) fast(o, p, n, kind == 3, alpha);
-    else pixel(&t, o, p, n, kind == 3);
+    if (kind == 1) tga_pixel(&t, o, cmap + ((n == 1 ? p[0] : p[0] | p[1] << 8) - cmap_start) * cmap_bytes, cmap_bytes, 0);
+    else if (quick) tga_fast(o, p, n, kind == 3, alpha);
+    else tga_pixel(&t, o, p, n, kind == 3);
   }
 }
 
-static unsigned pack(const float *p) {
+static unsigned tga_pack(const float *p) {
   ivec q = vtrunc(add(mul(vmin(vmax(load(p), splat(0)), splat(1)), splat(255)), splat(0.5f)));
   return ilane(narrow(q, q, q, q), 0);
 }
 
-EXPORT("tga_gray") int tga_gray(const float *px, int count) {
+int tex_tga_gray(const float *px, int count) {
   for (int i = 0; i < count; i++) {
-    unsigned p = pack(px + i * 4);
+    unsigned p = tga_pack(px + i * 4);
     if ((p & 255) != (p >> 8 & 255) || (p & 255) != (p >> 16 & 255)) return 0;
   }
   return 1;
@@ -126,7 +128,7 @@ EXPORT("tga_gray") int tga_gray(const float *px, int count) {
 
 static void bytes(const float *px, int w, int n, unsigned char *row) {
   for (int x = 0; x < w; x++) {
-    unsigned p = pack(px + x * 4);
+    unsigned p = tga_pack(px + x * 4);
     unsigned char *o = row + x * n;
     if (n < 3) o[0] = p, o[n - 1] = n == 2 ? p >> 24 : p;
     else o[0] = p >> 16, o[1] = p >> 8, o[2] = p;
@@ -139,7 +141,7 @@ static int same(const unsigned char *row, int a, int b, int n) {
   return 1;
 }
 
-EXPORT("tga_pixels") int tga_pixels(const float *px, int w, int h, int n, int rle, unsigned char *out, unsigned char *row) {
+int tex_tga_pixels(const float *px, int w, int h, int n, int rle, unsigned char *out, unsigned char *row) {
   int at = 0;
   for (int y = 0; y < h; y++) {
     bytes(px + y * w * 4, w, n, row);

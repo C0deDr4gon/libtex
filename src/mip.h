@@ -1,4 +1,6 @@
-#include "base.h"
+#pragma once
+
+#include "platform.h"
 #include "vec.h"
 
 typedef struct {
@@ -13,10 +15,10 @@ static void taps(int src, int dst, Taps *out) {
   double r = (double)src / dst;
   for (int x = 0; x < dst; x++) {
     double a = x * r, b = a + r;
-    int end = (int)__builtin_ceil(b);
+    int end = (int)fceil(b);
     if (end > src) end = src;
     out[x].n = 0;
-    for (int i = (int)floor(a); i < end && out[x].n < 3; i++) {
+    for (int i = (int)ffloor(a); i < end && out[x].n < 3; i++) {
       double lo = a > i ? a : i, hi = b < i + 1 ? b : i + 1;
       out[x].at[out[x].n] = i;
       out[x].w[out[x].n++] = (hi - lo) / r;
@@ -24,7 +26,7 @@ static void taps(int src, int dst, Taps *out) {
   }
 }
 
-static void half(const float *src, int width, int height, float *out, int w, int h) {
+static void halve(const float *src, int width, int height, float *out, int w, int h) {
   taps(width, w, xs);
   taps(height, h, ys);
   for (int y = 0; y < h; y++) {
@@ -46,10 +48,10 @@ static void half(const float *src, int width, int height, float *out, int w, int
   }
 }
 
-EXPORT("mips") void mips(const float *src, int width, int height, float *out) {
+void tex_mips(const float *src, int width, int height, float *out) {
   while (width > 1 || height > 1) {
     int w = width > 1 ? width >> 1 : 1, h = height > 1 ? height >> 1 : 1;
-    half(src, width, height, out, w, h);
+    halve(src, width, height, out, w, h);
     src = out;
     out += w * h * 4;
     width = w;

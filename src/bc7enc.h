@@ -1,13 +1,14 @@
-#include "base.h"
+#pragma once
+
+#include "platform.h"
 #include "bits.h"
 #include "codec.h"
 #include "fit.h"
 #include "bc7.h"
+#include "partition.h"
 
 static vec weight[16];
 static Probe probes[4][16];
-
-void bc7_decode(const unsigned char *in, float *px);
 
 static dvec rounded(dvec x, dvec max) {
   return dmin(dmax(dfloor(dadd(x, dsplat(0.5))), dsplat(0)), max);
@@ -53,8 +54,8 @@ static void quantize_pair(Block *b, int s, vec lo, vec hi, const Mode *m) {
     if (c < least) least = c, best = i;
   }
   int pa = pairs[best][0], pz = pairs[best][1];
-  __builtin_memcpy(b->ep[s * 2], qa[n > 1 ? pa : 0], sizeof qa[0]);
-  __builtin_memcpy(b->ep[s * 2 + 1], qz[n > 1 ? pz : 0], sizeof qz[0]);
+  copy(b->ep[s * 2], qa[n > 1 ? pa : 0], sizeof qa[0]);
+  copy(b->ep[s * 2 + 1], qz[n > 1 ? pz : 0], sizeof qz[0]);
   if (m->epb) b->pbits[s * 2] = pa, b->pbits[s * 2 + 1] = pz;
   if (m->spb) b->pbits[s] = pa;
 }
@@ -169,7 +170,7 @@ static float assign(Block *b, const vec *px, float limit, int only) {
         b->pbits[s * 2 + 1] = t;
       }
     }
-    __builtin_memcpy(b->idx, color, 16);
+    copy(b->idx, color, 16);
     return e;
   }
   const int *w = weights(ab);
@@ -190,8 +191,8 @@ static float assign(Block *b, const vec *px, float limit, int only) {
   }
   if (color[0] >= 1 << (cb - 1)) flip(b, 0, 0, 3, color, cb, m);
   if (alpha[0] >= 1 << (ab - 1)) flip(b, 0, 3, 4, alpha, ab, m);
-  __builtin_memcpy(b->idx, isel ? alpha : color, 16);
-  __builtin_memcpy(b->idx2, isel ? color : alpha, 16);
+  copy(b->idx, isel ? alpha : color, 16);
+  copy(b->idx2, isel ? color : alpha, 16);
   return e;
 }
 
@@ -349,7 +350,7 @@ static void deep(Block *best, float *least, const vec *pixels) {
   }
 }
 
-static void encode(const float *in, unsigned char *out) {
+static void bc7_encode(const float *in, unsigned char *out) {
   vec pixels[16], px[16], ends[3][2];
   for (int i = 0; i < 16; i++) pixels[i] = mul(load(in + i * 4), splat(255));
   for (int i = 0; i < 16; i++) weight[i] = mul(with(splat(clamp(in[i * 4 + 3], 1.0f / 64, 1)), 3, 1), load(tint));
@@ -401,4 +402,4 @@ static void encode(const float *in, unsigned char *out) {
   pack(&best, out);
 }
 
-const Codec BC7 = { encode, bc7_decode, 16 };
+static const Codec BC7 = { bc7_encode, bc7_decode, 16 };

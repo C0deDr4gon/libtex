@@ -1,8 +1,10 @@
-#include "base.h"
+#pragma once
+
+#include "platform.h"
 #include "vec.h"
 
 static double sinpi(double x) {
-  x -= 2 * floor((x + 1) / 2);
+  x -= 2 * ffloor((x + 1) / 2);
   if (x > 0.5) x = 1 - x;
   if (x < -0.5) x = -1 - x;
   double t = x * 3.141592653589793, t2 = t * t;
@@ -34,7 +36,7 @@ static int plan(int in, int out, int filter, Plan *p) {
   if (!p->first || !p->count || !p->weights) return 0;
   for (int o = 0; o < out; o++) {
     double c = (o + 0.5) * scale - 0.5, sum = 0;
-    int lo = (int)floor(c - radius), n = 0;
+    int lo = (int)ffloor(c - radius), n = 0;
     float *w = p->weights + o * p->taps;
     for (int i = lo; i <= lo + p->taps - 1; i++) sum += w[n++] = kernel(filter, (i - c) / fs);
     for (int k = 0; k < n; k++) w[k] = sum ? w[k] / sum : 0;
@@ -46,7 +48,7 @@ static int plan(int in, int out, int filter, Plan *p) {
 
 static int edge(int i, int n) { return i < 0 ? 0 : i >= n ? n - 1 : i; }
 
-EXPORT("resize") int resize(const float *src, int w, int h, float *dst, int nw, int nh, int filter) {
+int tex_resize(const float *src, int w, int h, float *dst, int nw, int nh, int filter) {
   Plan x, y;
   float *tmp = alloc(nw * h * 16);
   if (!tmp || !plan(w, nw, filter, &x) || !plan(h, nh, filter, &y)) return 0;

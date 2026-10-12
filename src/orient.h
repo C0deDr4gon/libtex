@@ -1,7 +1,9 @@
-#include "base.h"
+#pragma once
+
+#include "platform.h"
 #include "vec.h"
 
-EXPORT("orient") void orient(const float *src, int w, int h, float *dst, int op) {
+void tex_orient(const float *src, int w, int h, float *dst, int op) {
   int ow = op == 2 || op == 4 ? h : w, oh = op == 2 || op == 4 ? w : h;
   for (int y = 0; y < oh; y++) {
     for (int x = 0; x < ow; x++) {

@@ -1,7 +1,9 @@
-#include "base.h"
+#pragma once
+
+#include "platform.h"
 #include "vec.h"
 
-EXPORT("premultiply") void premultiply(float *px, int count, int inverse) {
+void tex_premultiply(float *px, int count, int inverse) {
   ivec rgb = imake(-1, -1, -1, 0);
   for (int i = 0; i < count; i++) {
     vec v = load(px + i * 4), a = splat(lane(v, 3));

@@ -1,7 +1,9 @@
-#include "base.h"
+#pragma once
+
+#include "platform.h"
 #include "vec.h"
 
-EXPORT("swizzle") void swizzle(float *px, int count, const int *src, const float *scale, const float *offset) {
+void tex_swizzle(float *px, int count, const int *src, const float *scale, const float *offset) {
   unsigned char bytes[16];
   int fixed[4];
   for (int k = 0; k < 4; k++) {

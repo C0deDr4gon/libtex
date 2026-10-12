@@ -1,4 +1,6 @@
-#include "base.h"
+#pragma once
+
+#include "platform.h"
 #include "piz.h"
 
 static const unsigned char ORDER[15] = { 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15 };
@@ -21,7 +23,7 @@ static int block(const unsigned char *data, int length, int p, unsigned short *s
   return data[p + 2] >= 52 ? 3 : 14;
 }
 
-int b44(const unsigned char *data, int length, unsigned short *buf, unsigned char *out, int width, int lines, const int *chans, int count) {
+static int b44(const unsigned char *data, int length, unsigned short *buf, unsigned char *out, int width, int lines, const int *chans, int count) {
   int p = 0;
   unsigned short *plane = buf;
   for (int c = 0; c < count; c++) {

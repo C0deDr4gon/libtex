@@ -1,7 +1,9 @@
-#include "base.h"
+#pragma once
+
+#include "platform.h"
 #include "vec.h"
 
-EXPORT("to_bytes") void to_bytes(const float *in, int count, unsigned char *out) {
+void tex_to_bytes(const float *in, int count, unsigned char *out) {
   int i = 0;
   for (; i + 16 <= count; i += 16) {
     ivec q[4];

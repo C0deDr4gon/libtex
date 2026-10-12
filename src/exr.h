@@ -1,10 +1,12 @@
-#include "base.h"
+#pragma once
+
+#include "platform.h"
 #include "half.h"
-#include "piz.h"
+#include "b44.h"
 
 static const int SIZE[3] = { 4, 2, 4 };
 
-static void unrle(const unsigned char *in, int length, unsigned char *out, int size) {
+static void exr_unrle(const unsigned char *in, int length, unsigned char *out, int size) {
   int i = 0, o = 0;
   while (i < length && o < size) {
     int n = (signed char)in[i++];
@@ -52,25 +54,25 @@ static void pxr24(const unsigned char *tmp, int length, unsigned char *out, int 
 static float read(const unsigned char *p, int type, const float *half) {
   if (type == 2) {
     float v;
-    __builtin_memcpy(&v, p, 4);
+    copy(&v, p, 4);
     return v;
   }
   if (type == 0) return (unsigned)(p[0] | p[1] << 8 | p[2] << 16 | (unsigned)p[3] << 24);
   return half[p[0] | p[1] << 8];
 }
 
-EXPORT("exr_fill") void exr_fill(float *out, int count) {
+void tex_exr_fill(float *out, int count) {
   for (int i = 0; i < count; i++) {
     out[i * 4] = out[i * 4 + 1] = out[i * 4 + 2] = 0;
     out[i * 4 + 3] = 1;
   }
 }
 
-EXPORT("exr_chunk") int exr_chunk(int kind, unsigned char *src, int length, unsigned char *tmp, unsigned char *dst, int size, const int *chans, int count, float *out, int full, int x0, int y0, int width, int rows) {
+int tex_exr_chunk(int kind, unsigned char *src, int length, unsigned char *tmp, unsigned char *dst, int size, const int *chans, int count, float *out, int full, int x0, int y0, int width, int rows) {
   const unsigned char *data = src;
   if (kind == 1) {
-    __builtin_memset(tmp, 0, size);
-    unrle(src, length, tmp, size);
+    zero(tmp, size);
+    exr_unrle(src, length, tmp, size);
     unpredict(tmp, size, dst);
     data = dst;
   }
@@ -109,6 +111,6 @@ EXPORT("exr_chunk") int exr_chunk(int kind, unsigned char *src, int length, unsi
   return 1;
 }
 
-EXPORT("half_plane") void half_plane(const float *px, int count, int k, unsigned short *out) {
+void tex_half_plane(const float *px, int count, int k, unsigned short *out) {
   for (int i = 0; i < count; i++) out[i] = to_half(px[i * 4 + k], 0);
 }

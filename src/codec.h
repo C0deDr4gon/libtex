@@ -6,7 +6,7 @@ typedef struct {
   int size;
 } Codec;
 
-extern int fast;
-extern float tint[4];
+static int fast;
+static float tint[4] = { 1, 1, 1, 1 };
 
-extern const Codec NONE, BC1, BC2, BC3, BC4, BC4_SNORM, BC5, BC5_SNORM, BC6H_UF16, BC6H_SF16, BC7;
+

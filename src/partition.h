@@ -1,4 +1,6 @@
-#include "base.h"
+#pragma once
+
+#include "platform.h"
 #include "fit.h"
 #include "bc7tables.h"
 
@@ -22,9 +24,9 @@ static vec part(const vec *s, vec n) {
   return vselect(gt(n, splat(0)), vdiv(d, n), splat(0));
 }
 
-void spreads(const vec *px, int ns, int count, float *out) {
+static void spreads(const vec *px, int ns, int count, float *out) {
   if (!ready) init();
-  float p[64] __attribute__((aligned(16))), c[4][16];
+  ALIGN16 float p[64], c[4][16];
   vec total[4];
   for (int i = 0; i < 16; i++) store(p + i * 4, px[i]);
   for (int k = 0; k < 4; k++) {
