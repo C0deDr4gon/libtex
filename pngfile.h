@@ -86,7 +86,7 @@ int tex_png_read(const unsigned char *bytes, int length, float *out, void *scrat
     pos += 12 + len;
   }
   zero(raw, f.raw);
-  if (inflate(idat, f.idat, raw, f.raw) < 0) return TEX_ERROR_DATA;
+  if (unzlib(idat, f.idat, raw, f.raw) < 0) return TEX_ERROR_DATA;
   png_decode(raw, f.width, f.height, f.depth, f.color, f.interlace, palette, f.trns ? trns : 0, trns_length, out);
   return TEX_OK;
 }

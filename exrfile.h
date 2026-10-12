@@ -177,7 +177,7 @@ int tex_exr_read(const unsigned char *bytes, int length, float *out, void *scrat
     Chunk c;
     chunk(&e, i, &c);
     int len = c.length;
-    if (c.kind == 2 || c.kind == 4) len = inflate(c.data, c.length, tmp, e.cap);
+    if (c.kind == 2 || c.kind == 4) len = unzlib(c.data, c.length, tmp, e.cap);
     if (len < 0 || !exr_chunk(c.kind, c.data, len, tmp, dst, c.size, chans, e.count, out, e.width, c.x0, c.y0, c.w, c.rows, z)) return TEX_ERROR_DATA;
   }
   return TEX_OK;

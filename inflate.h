@@ -4,11 +4,13 @@
 #include "vec.h"
 
 #define FAST 10
+#define KIND(k) ((unsigned)(k) << 6)
+#define KINDS KIND(7)
 
 
 typedef struct {
   short count[16], symbol[288];
-  unsigned short fast[1 << FAST];
+  u64 fast[1 << FAST];
 } Huff;
 
 typedef struct {
@@ -49,9 +51,18 @@ static unsigned need(Flate *s, int n) {
   return v;
 }
 
-static int huff(Huff *h, const unsigned char *len, int n) {
+static unsigned entry(int mode, int sym) {
+  if (mode == 0) return (unsigned)sym << 16;
+  if (mode == 2) return sym < 30 ? (unsigned)DBASE[sym] << 16 | DEXT[sym] << 9 | KIND(1) : KIND(3);
+  if (sym < 256) return (unsigned)sym << 16;
+  if (sym == 256) return KIND(2);
+  return sym < 286 ? (unsigned)LBASE[sym - 257] << 16 | LEXT[sym - 257] << 9 | KIND(1) : KIND(3);
+}
+
+static int huff(Huff *h, const unsigned char *len, int n, int mode) {
   short offs[16];
   zero(h, sizeof *h);
+  for (int i = 0; i < 1 << FAST; i++) h->fast[i] = KIND(4);
   for (int i = 0; i < n; i++) h->count[len[i]]++;
   h->count[0] = 0;
   int left = 1;
@@ -67,22 +78,25 @@ static int huff(Huff *h, const unsigned char *len, int n) {
     for (int k = 0; k < h->count[l]; k++, code++) {
       int r = 0;
       for (int b = 0; b < l; b++) r |= (code >> b & 1) << (l - 1 - b);
-      for (; r < 1 << FAST; r += 1 << l) h->fast[r] = h->symbol[at] << 4 | l;
-      at++;
+      unsigned e = entry(mode, h->symbol[at++]) | l;
+      int x = e >> 9 & 15;
+      if ((e & KINDS) == KIND(1) && l + x <= FAST) {
+        for (int v = 0; v < 1 << x; v++) for (int q = r | v << l; q < 1 << FAST; q += 1 << (l + x)) h->fast[q] = ((e >> 16) + v) << 16 | KIND(5) | (l + x);
+      } else {
+        for (; r < 1 << FAST; r += 1 << l) h->fast[r] = e;
+      }
     }
     code <<= 1;
   }
   return 1;
 }
 
-static int slow(u64 *bits, int *count, const Huff *h) {
+static int slow(u64 bits, const Huff *h) {
   int code = 0, first = 0, index = 0;
-  for (int l = 1; l < 16; l++) {
-    code |= (int)(*bits & 1);
-    *bits >>= 1;
-    --*count;
+  for (int l = 1; l < 16; l++, bits >>= 1) {
+    code |= (int)(bits & 1);
     int c = h->count[l];
-    if (code - c < first) return h->symbol[index + code - first];
+    if (code - c < first) return h->symbol[index + code - first] << 4 | l;
     index += c;
     first = (first + c) << 1;
     code <<= 1;
@@ -92,59 +106,91 @@ static int slow(u64 *bits, int *count, const Huff *h) {
 
 static int symbol(Flate *s, const Huff *h) {
   if (s->count < 16) refill(s);
-  int e = h->fast[s->bits & ((1 << FAST) - 1)];
-  if (!e) return slow(&s->bits, &s->count, h);
-  need(s, e & 15);
-  return e >> 4;
+  unsigned e = h->fast[s->bits & ((1 << FAST) - 1)];
+  if ((e & KINDS) != KIND(4)) {
+    need(s, e & 15);
+    return e >> 16;
+  }
+  int c = slow(s->bits, h);
+  if (c >= 0) need(s, c & 15);
+  return c < 0 ? -1 : c >> 4;
 }
 
-static int codes(Flate *s, const Huff *lit, const Huff *dist) {
+static unsigned lookup(u64 bits, const Huff *h, int mode) {
+  unsigned e = h->fast[bits & ((1 << FAST) - 1)];
+  if ((e & KINDS) != KIND(4)) return e;
+  int c = slow(bits, h);
+  return c < 0 ? KIND(3) | 1 : entry(mode, c >> 4) | (c & 15);
+}
+
+static THREAD Huff LIT, DIST;
+
+static int tail(Flate *s) {
+  const Huff *lit = &LIT, *dist = &DIST;
   const unsigned char *in = s->in;
   unsigned char *out = s->out;
   u64 bits = s->bits;
+  const u64 *fast = lit->fast;
   int count = s->count, pos = s->pos, at = s->at, cap = s->cap, end = s->length - 8, ok = 0;
-  const u64 MASK = (1 << FAST) - 1;
   for (;;) {
-    if (count < 48) {
-      if (pos <= end) {
-        u64 v;
-        copy(&v, in + pos, 8);
-        bits |= v << count;
-        pos += (63 - count) >> 3;
-        count |= 56;
-      } else {
-        for (; count <= 56; count += 8, pos++) bits |= (u64)(pos < s->length ? in[pos] : 0) << count;
-      }
+    if (pos <= end) {
+      u64 v;
+      copy(&v, in + pos, 8);
+      bits |= v << count;
+      pos += (63 - count) >> 3;
+      count |= 56;
+    } else {
+      for (; count <= 56; count += 8, pos++) bits |= (u64)(pos < s->length ? in[pos] : 0) << count;
     }
-    int e = lit->fast[bits & MASK], c;
-    if (e) bits >>= e & 15, count -= e & 15, c = e >> 4;
-    else c = slow(&bits, &count, lit);
-    if (c < 256) {
-      if (c < 0 || at >= cap) break;
-      out[at++] = c;
+    unsigned e = lookup(bits, lit, 1);
+    bits >>= e & 63, count -= e & 15;
+    if (!(e & KINDS)) {
+      if (cap - at < 4) {
+        if (at >= cap) break;
+        out[at++] = e >> 16;
+        continue;
+      }
+      out[at++] = e >> 16;
+#define LITERAL \
+      e = fast[bits & ((1 << FAST) - 1)]; \
+      if (e & KINDS) continue; \
+      bits >>= e & 63, count -= e & 15; \
+      out[at++] = e >> 16;
+      LITERAL
+      LITERAL
+      LITERAL
+#undef LITERAL
       continue;
     }
-    if (c == 256) {
-      ok = 1;
+    if ((e & KINDS) != KIND(1) && (e & KINDS) != KIND(5)) {
+      ok = (e & KINDS) == KIND(2);
       break;
     }
-    c -= 257;
-    if (c >= 29) break;
-    int len = LBASE[c] + (int)(bits & ((1u << LEXT[c]) - 1));
-    bits >>= LEXT[c], count -= LEXT[c];
-    int d = dist->fast[bits & MASK];
-    if (d) bits >>= d & 15, count -= d & 15, d >>= 4;
-    else d = slow(&bits, &count, dist);
-    if (d < 0 || d >= 30) break;
-    int back = DBASE[d] + (int)(bits & ((1u << DEXT[d]) - 1));
-    bits >>= DEXT[d], count -= DEXT[d];
+    int len = e >> 16;
+    if ((e & KINDS) == KIND(1)) {
+      int x = e >> 9 & 15;
+      len += (int)(bits & ((1u << x) - 1));
+      bits >>= x, count -= x;
+    }
+    e = lookup(bits, dist, 2);
+    bits >>= e & 63, count -= e & 15;
+    if ((e & KINDS) != KIND(1) && (e & KINDS) != KIND(5)) break;
+    int back = e >> 16;
+    if ((e & KINDS) == KIND(1)) {
+      int x = e >> 9 & 15;
+      back += (int)(bits & ((1u << x) - 1));
+      bits >>= x, count -= x;
+    }
     if (back > at || len > cap - at) break;
     unsigned char *o = out + at;
     at += len;
-    if (back >= 16 && cap - at >= 16) {
+    int room = cap - at;
+    if (room >= 16 && (back >= 16 || (len <= back && len <= 16))) {
       for (int k = 0; k < len; k += 16) istore(o + k, iload(o + k - back));
-    } else if (back >= 8 && cap - at >= 8) {
+    } else if (back >= 8 && room >= 8) {
       for (int k = 0; k < len; k += 8) copy(o + k, o + k - back, 8);
+    } else if (back >= 4 && room >= 4) {
+      for (int k = 0; k < len; k += 4) copy(o + k, o + k - back, 4);
     } else {
       for (int k = 0; k < len; k++) o[k] = o[k - back];
     }
@@ -153,24 +199,101 @@ static int codes(Flate *s, const Huff *lit, const Huff *dist) {
   return ok;
 }
 
+static int codes(Flate *s) {
+  const Huff *lit = &LIT, *dist = &DIST;
+  const unsigned char *ip = s->in + s->pos, *iend = s->in + s->length - 16;
+  unsigned char *op = s->out + s->at, *start = s->out, *oend = s->out + s->cap;
+  const u64 *lf = LIT.fast, *df = DIST.fast;
+  u64 bits = s->bits, v;
+  u64 count = (u64)s->count;
+  int r = -1;
+#define REFILL \
+  copy(&v, ip, 8); \
+  bits |= v << (count & 63); \
+  ip += (63 - (count & 63)) >> 3; \
+  count |= 56;
+  while (ip <= iend && oend - op >= 274) {
+    REFILL
+    u64 e = lf[bits & ((1 << FAST) - 1)];
+#define LITERAL \
+    if (e & KINDS) goto match; \
+    bits >>= e & 63, count -= e; \
+    *op++ = e >> 16; \
+    e = lf[bits & ((1 << FAST) - 1)];
+    LITERAL
+    LITERAL
+    LITERAL
+    LITERAL
+#undef LITERAL
+    continue;
+  match:
+    if ((e & KINDS) == KIND(4)) e = lookup(bits, lit, 1);
+    bits >>= e & 63, count -= e;
+    if (!(e & KINDS)) {
+      *op++ = e >> 16;
+      continue;
+    }
+    if ((e & KINDS) != KIND(1) && (e & KINDS) != KIND(5)) {
+      r = (e & KINDS) == KIND(2);
+      break;
+    }
+    REFILL
+    int len = e >> 16;
+    if ((e & KINDS) == KIND(1)) {
+      int x = e >> 9 & 15;
+      len += (int)(bits & ((1u << x) - 1));
+      bits >>= x, count -= x;
+    }
+    e = df[bits & ((1 << FAST) - 1)];
+    if ((e & KINDS) == KIND(4)) e = lookup(bits, dist, 2);
+    bits >>= e & 63, count -= e;
+    int back = e >> 16;
+    if ((e & KINDS) == KIND(1)) {
+      int x = e >> 9 & 15;
+      back += (int)(bits & ((1u << x) - 1));
+      bits >>= x, count -= x;
+    } else if ((e & KINDS) != KIND(5)) {
+      r = 0;
+      break;
+    }
+    if (back > op - start) {
+      r = 0;
+      break;
+    }
+    unsigned char *o = op;
+    op += len;
+    if (back >= 16 || (len <= back && len <= 16)) {
+      for (int k = 0; k < len; k += 16) istore(o + k, iload(o + k - back));
+    } else if (back >= 8) {
+      for (int k = 0; k < len; k += 8) copy(o + k, o + k - back, 8);
+    } else if (back >= 4) {
+      for (int k = 0; k < len; k += 4) copy(o + k, o + k - back, 4);
+    } else {
+      for (int k = 0; k < len; k++) o[k] = o[k - back];
+    }
+  }
+#undef REFILL
+  s->bits = bits, s->count = (int)(count & 63), s->pos = (int)(ip - s->in), s->at = (int)(op - start);
+  return r >= 0 ? r : tail(s);
+}
+
 static int fixed(Flate *s) {
   unsigned char len[320];
-  Huff lit, dist;
   for (int i = 0; i < 288; i++) len[i] = i < 144 ? 8 : i < 256 ? 9 : i < 280 ? 7 : 8;
   for (int i = 0; i < 30; i++) len[288 + i] = 5;
-  return huff(&lit, len, 288) && huff(&dist, len + 288, 30) && codes(s, &lit, &dist);
+  return huff(&LIT, len, 288, 1) && huff(&DIST, len + 288, 30, 2) && codes(s);
 }
 
 static int dynamic(Flate *s) {
   unsigned char len[320];
-  Huff lit, dist;
+  Huff code;
   int nlen = need(s, 5) + 257, ndist = need(s, 5) + 1, ncode = need(s, 4) + 4;
   if (nlen > 286 || ndist > 30) return 0;
   zero(len, 19);
   for (int i = 0; i < ncode; i++) len[CLORDER[i]] = need(s, 3);
-  if (!huff(&lit, len, 19)) return 0;
+  if (!huff(&code, len, 19, 0)) return 0;
   for (int i = 0; i < nlen + ndist;) {
-    int c = symbol(s, &lit);
+    int c = symbol(s, &code);
     if (c < 0) return 0;
     if (c < 16) {
       len[i++] = c;
@@ -186,7 +309,7 @@ static int dynamic(Flate *s) {
     while (n--) len[i++] = v;
   }
   if (!len[256]) return 0;
-  return huff(&lit, len, nlen) && huff(&dist, len + nlen, ndist) && codes(s, &lit, &dist);
+  return huff(&LIT, len, nlen, 1) && huff(&DIST, len + nlen, ndist, 2) && codes(s);
 }
 
 static int stored(Flate *s) {
@@ -197,7 +320,7 @@ static int stored(Flate *s) {
   return 1;
 }
 
-static int inflate(const unsigned char *in, int length, unsigned char *out, int cap) {
+static int unzlib(const unsigned char *in, int length, unsigned char *out, int cap) {
   if (length < 2 || (in[0] & 15) != 8 || (in[0] << 8 | in[1]) % 31) return -1;
   Flate s = { in + 2, length - 2, 0, 0, 0, out, cap, 0 };
   int last;

@@ -1,6 +1,7 @@
 #pragma once
 
 #define ALIGN16 __attribute__((aligned(16)))
+#define THREAD _Thread_local
 
 typedef unsigned long long u64;
 
