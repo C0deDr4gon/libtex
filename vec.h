@@ -49,6 +49,7 @@ static inline ivec iand(ivec a, ivec b) { return I(wasm_v128_and(a.v, b.v)); }
 static inline ivec ior(ivec a, ivec b) { return I(wasm_v128_or(a.v, b.v)); }
 static inline ivec ilt(ivec a, ivec b) { return I(wasm_i32x4_lt(a.v, b.v)); }
 static inline ivec igt(ivec a, ivec b) { return I(wasm_i32x4_gt(a.v, b.v)); }
+static inline ivec ieq(ivec a, ivec b) { return I(wasm_i32x4_eq(a.v, b.v)); }
 static inline ivec iselect(ivec m, ivec a, ivec b) { return I(wasm_v128_bitselect(a.v, b.v, m.v)); }
 #define ishr(a, n) I(wasm_i32x4_shr((a).v, n))
 #define iushr(a, n) I(wasm_u32x4_shr((a).v, n))

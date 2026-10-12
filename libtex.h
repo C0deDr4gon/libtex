@@ -23,7 +23,8 @@ void tex_swizzle(float *px, int count, const int *src, const float *scale, const
 void tex_orient(const float *src, int w, int h, float *dst, int op);
 int tex_resize_scratch(int w, int h, int nw, int nh, int filter);
 void tex_resize(const float *src, int w, int h, float *dst, int nw, int nh, int filter, void *scratch);
-void tex_to_bytes(const float *in, int count, unsigned char *out);
+int tex_to_bytes(const float *in, int count, unsigned char *out);
+void tex_from_bytes(const unsigned char *in, int count, float *out);
 
 int tex_png_info(const unsigned char *bytes, int length, tex_info *info);
 int tex_png_read(const unsigned char *bytes, int length, float *out, void *scratch);
