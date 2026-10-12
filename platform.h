@@ -2,6 +2,8 @@
 
 #define ALIGN16 __attribute__((aligned(16)))
 
+typedef unsigned long long u64;
+
 static inline double fsqrt(double v) { return __builtin_sqrt(v); }
 static inline float fsqrtf(float v) { return __builtin_sqrtf(v); }
 static inline double ffloor(double v) { return __builtin_floor(v); }

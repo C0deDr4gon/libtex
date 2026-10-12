@@ -5,6 +5,9 @@ typedef enum { TEX_NONE, TEX_BC1, TEX_BC2, TEX_BC3, TEX_BC4, TEX_BC4_SNORM, TEX_
 typedef enum { TEX_BEST, TEX_FAST } tex_quality;
 typedef struct { tex_quality quality; float weight[3]; } tex_options;
 
+typedef enum { TEX_OK, TEX_ERROR_DATA, TEX_ERROR_COMPRESSION, TEX_ERROR_DEEP, TEX_ERROR_SUBSAMPLED } tex_error;
+typedef struct { int width, height, bits, compression, scratch; } tex_info;
+
 void tex_init(void);
 
 int tex_block_size(tex_format id);
@@ -27,9 +30,8 @@ void tex_png_rows(const float *px, int w, int h, int n, int depth, int mode, uns
 void tex_tga_read(const unsigned char *buf, int length, int pos, int rle, unsigned char *scratch, int width, int height, int n, int kind, int desc, const unsigned char *cmap, int cmap_bytes, int cmap_start, int alpha, int premultiplied, float *out);
 int tex_tga_gray(const float *px, int count);
 int tex_tga_pixels(const float *px, int w, int h, int n, int rle, unsigned char *out, unsigned char *row);
-int tex_exr_chunk(int kind, unsigned char *src, int length, unsigned char *tmp, unsigned char *dst, int size, const int *chans, int count, float *out, int full, int x0, int y0, int width, int rows, void *scratch);
-int tex_exr_scratch(void);
-void tex_exr_fill(float *out, int count);
+int tex_exr_info(const unsigned char *bytes, int length, tex_info *info);
+int tex_exr_read(const unsigned char *bytes, int length, float *out, void *scratch);
 void tex_half_plane(const float *px, int count, int k, unsigned short *out);
 
 #endif
@@ -46,6 +48,6 @@ void tex_half_plane(const float *px, int count, int k, unsigned short *out);
 #include "bytes.h"
 #include "png.h"
 #include "tga.h"
-#include "exr.h"
+#include "exrfile.h"
 #include "init.h"
 #endif

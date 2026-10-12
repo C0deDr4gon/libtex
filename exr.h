@@ -61,16 +61,14 @@ static float read(const unsigned char *p, int type, const float *half) {
   return half[p[0] | p[1] << 8];
 }
 
-int tex_exr_scratch(void) { return sizeof(Piz); }
-
-void tex_exr_fill(float *out, int count) {
+static void exr_fill(float *out, int count) {
   for (int i = 0; i < count; i++) {
     out[i * 4] = out[i * 4 + 1] = out[i * 4 + 2] = 0;
     out[i * 4 + 3] = 1;
   }
 }
 
-int tex_exr_chunk(int kind, unsigned char *src, int length, unsigned char *tmp, unsigned char *dst, int size, const int *chans, int count, float *out, int full, int x0, int y0, int width, int rows, void *scratch) {
+static int exr_chunk(int kind, const unsigned char *src, int length, unsigned char *tmp, unsigned char *dst, int size, const int *chans, int count, float *out, int full, int x0, int y0, int width, int rows, Piz *z) {
   const unsigned char *data = src;
   if (kind == 1) {
     zero(tmp, size);
@@ -79,15 +77,15 @@ int tex_exr_chunk(int kind, unsigned char *src, int length, unsigned char *tmp, 
     data = dst;
   }
   if (kind == 2) {
-    unpredict(src, length, dst);
+    unpredict(tmp, length, dst);
     data = dst;
   }
   if (kind == 3) {
-    if (!scratch || !piz(scratch, src, length, (unsigned short *)tmp, dst, size, width, rows, chans, count)) return 0;
+    if (!piz(z, src, length, (unsigned short *)tmp, dst, size, width, rows, chans, count)) return 0;
     data = dst;
   }
   if (kind == 4) {
-    pxr24(src, length, dst, width, rows, chans, count);
+    pxr24(tmp, length, dst, width, rows, chans, count);
     data = dst;
   }
   if (kind == 5) {

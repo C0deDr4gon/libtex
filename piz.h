@@ -6,7 +6,6 @@
 #define DECBITS 14
 #define DECSIZE (1 << DECBITS)
 
-typedef unsigned long long u64;
 
 typedef struct {
   u64 code[65537];
