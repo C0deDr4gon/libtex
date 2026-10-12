@@ -1,8 +1,9 @@
 #pragma once
 
 #include "platform.h"
+#include "vec.h"
 
-#define FAST 9
+#define FAST 10
 
 
 typedef struct {
@@ -25,6 +26,14 @@ static const short DEXT[30] = { 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 
 static const unsigned char CLORDER[19] = { 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 };
 
 static void refill(Flate *s) {
+  if (s->pos <= s->length - 8) {
+    u64 v;
+    copy(&v, s->in + s->pos, 8);
+    s->bits |= v << s->count;
+    s->pos += (63 - s->count) >> 3;
+    s->count |= 56;
+    return;
+  }
   while (s->count <= 56) {
     s->bits |= (u64)(s->pos < s->length ? s->in[s->pos] : 0) << s->count;
     s->pos++;
@@ -66,16 +75,12 @@ static int huff(Huff *h, const unsigned char *len, int n) {
   return 1;
 }
 
-static int symbol(Flate *s, const Huff *h) {
-  if (s->count < 16) refill(s);
-  int e = h->fast[s->bits & ((1 << FAST) - 1)];
-  if (e) {
-    need(s, e & 15);
-    return e >> 4;
-  }
+static int slow(u64 *bits, int *count, const Huff *h) {
   int code = 0, first = 0, index = 0;
   for (int l = 1; l < 16; l++) {
-    code |= need(s, 1);
+    code |= (int)(*bits & 1);
+    *bits >>= 1;
+    --*count;
     int c = h->count[l];
     if (code - c < first) return h->symbol[index + code - first];
     index += c;
@@ -85,27 +90,67 @@ static int symbol(Flate *s, const Huff *h) {
   return -1;
 }
 
+static int symbol(Flate *s, const Huff *h) {
+  if (s->count < 16) refill(s);
+  int e = h->fast[s->bits & ((1 << FAST) - 1)];
+  if (!e) return slow(&s->bits, &s->count, h);
+  need(s, e & 15);
+  return e >> 4;
+}
+
 static int codes(Flate *s, const Huff *lit, const Huff *dist) {
+  const unsigned char *in = s->in;
+  unsigned char *out = s->out;
+  u64 bits = s->bits;
+  int count = s->count, pos = s->pos, at = s->at, cap = s->cap, end = s->length - 8, ok = 0;
+  const u64 MASK = (1 << FAST) - 1;
   for (;;) {
-    int c = symbol(s, lit);
-    if (c < 0) return 0;
+    if (count < 48) {
+      if (pos <= end) {
+        u64 v;
+        copy(&v, in + pos, 8);
+        bits |= v << count;
+        pos += (63 - count) >> 3;
+        count |= 56;
+      } else {
+        for (; count <= 56; count += 8, pos++) bits |= (u64)(pos < s->length ? in[pos] : 0) << count;
+      }
+    }
+    int e = lit->fast[bits & MASK], c;
+    if (e) bits >>= e & 15, count -= e & 15, c = e >> 4;
+    else c = slow(&bits, &count, lit);
     if (c < 256) {
-      if (s->at >= s->cap) return 0;
-      s->out[s->at++] = c;
+      if (c < 0 || at >= cap) break;
+      out[at++] = c;
       continue;
     }
-    if (c == 256) return 1;
+    if (c == 256) {
+      ok = 1;
+      break;
+    }
     c -= 257;
-    if (c >= 29) return 0;
-    int len = LBASE[c] + need(s, LEXT[c]);
-    int d = symbol(s, dist);
-    if (d < 0 || d >= 30) return 0;
-    int back = DBASE[d] + need(s, DEXT[d]);
-    if (back > s->at || len > s->cap - s->at) return 0;
-    unsigned char *o = s->out + s->at;
-    for (int k = 0; k < len; k++) o[k] = o[k - back];
-    s->at += len;
+    if (c >= 29) break;
+    int len = LBASE[c] + (int)(bits & ((1u << LEXT[c]) - 1));
+    bits >>= LEXT[c], count -= LEXT[c];
+    int d = dist->fast[bits & MASK];
+    if (d) bits >>= d & 15, count -= d & 15, d >>= 4;
+    else d = slow(&bits, &count, dist);
+    if (d < 0 || d >= 30) break;
+    int back = DBASE[d] + (int)(bits & ((1u << DEXT[d]) - 1));
+    bits >>= DEXT[d], count -= DEXT[d];
+    if (back > at || len > cap - at) break;
+    unsigned char *o = out + at;
+    at += len;
+    if (back >= 16 && cap - at >= 16) {
+      for (int k = 0; k < len; k += 16) istore(o + k, iload(o + k - back));
+    } else if (back >= 8 && cap - at >= 8) {
+      for (int k = 0; k < len; k += 8) copy(o + k, o + k - back, 8);
+    } else {
+      for (int k = 0; k < len; k++) o[k] = o[k - back];
+    }
   }
+  s->bits = bits, s->count = count, s->pos = pos, s->at = at;
+  return ok;
 }
 
 static int fixed(Flate *s) {
