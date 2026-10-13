@@ -49,8 +49,8 @@ void tex_half_plane(const float *px, int count, int k, unsigned short *out);
 #include "orient.h"
 #include "resize.h"
 #include "bytes.h"
-#include "pngfile.h"
-#include "tgafile.h"
-#include "exrfile.h"
+#include "png.h"
+#include "tga.h"
+#include "exr.h"
 #include "init.h"
 #endif
