@@ -3,11 +3,7 @@
 #include "platform.h"
 #include "codec.h"
 #include "none.h"
-#include "bc1.h"
-#include "bc2.h"
-#include "bc3.h"
-#include "bc4.h"
-#include "bc5.h"
+#include "bc15.h"
 #include "bc6henc.h"
 #include "bc7enc.h"
 
