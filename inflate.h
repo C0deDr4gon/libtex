@@ -125,78 +125,31 @@ static unsigned lookup(u64 bits, const Huff *h, int mode) {
 
 static THREAD Huff LIT, DIST;
 
+static int extra(Flate *s, u64 e) {
+  int v = (int)(e >> 16);
+  if ((e & KINDS) == KIND(1)) v += need(s, e >> 9 & 15);
+  return v;
+}
+
 static int tail(Flate *s) {
-  const Huff *lit = &LIT, *dist = &DIST;
-  const unsigned char *in = s->in;
-  unsigned char *out = s->out;
-  u64 bits = s->bits;
-  const u64 *fast = lit->fast;
-  int count = s->count, pos = s->pos, at = s->at, cap = s->cap, end = s->length - 8, ok = 0;
   for (;;) {
-    if (pos <= end) {
-      u64 v;
-      copy(&v, in + pos, 8);
-      bits |= v << count;
-      pos += (63 - count) >> 3;
-      count |= 56;
-    } else {
-      for (; count <= 56; count += 8, pos++) bits |= (u64)(pos < s->length ? in[pos] : 0) << count;
-    }
-    unsigned e = lookup(bits, lit, 1);
-    bits >>= e & 63, count -= e & 15;
-    if (!(e & KINDS)) {
-      if (cap - at < 4) {
-        if (at >= cap) break;
-        out[at++] = e >> 16;
-        continue;
-      }
-      out[at++] = e >> 16;
-#define LITERAL \
-      e = fast[bits & ((1 << FAST) - 1)]; \
-      if (e & KINDS) continue; \
-      bits >>= e & 63, count -= e & 15; \
-      out[at++] = e >> 16;
-      LITERAL
-      LITERAL
-      LITERAL
-#undef LITERAL
+    if (s->count < 48) refill(s);
+    u64 e = lookup(s->bits, &LIT, 1), k = e & KINDS;
+    need(s, e & 15);
+    if (!k) {
+      if (s->at >= s->cap) return 0;
+      s->out[s->at++] = e >> 16;
       continue;
     }
-    if ((e & KINDS) != KIND(1) && (e & KINDS) != KIND(5)) {
-      ok = (e & KINDS) == KIND(2);
-      break;
-    }
-    int len = e >> 16;
-    if ((e & KINDS) == KIND(1)) {
-      int x = e >> 9 & 15;
-      len += (int)(bits & ((1u << x) - 1));
-      bits >>= x, count -= x;
-    }
-    e = lookup(bits, dist, 2);
-    bits >>= e & 63, count -= e & 15;
-    if ((e & KINDS) != KIND(1) && (e & KINDS) != KIND(5)) break;
-    int back = e >> 16;
-    if ((e & KINDS) == KIND(1)) {
-      int x = e >> 9 & 15;
-      back += (int)(bits & ((1u << x) - 1));
-      bits >>= x, count -= x;
-    }
-    if (back > at || len > cap - at) break;
-    unsigned char *o = out + at;
-    at += len;
-    int room = cap - at;
-    if (room >= 16 && (back >= 16 || (len <= back && len <= 16))) {
-      for (int k = 0; k < len; k += 16) istore(o + k, iload(o + k - back));
-    } else if (back >= 8 && room >= 8) {
-      for (int k = 0; k < len; k += 8) copy(o + k, o + k - back, 8);
-    } else if (back >= 4 && room >= 4) {
-      for (int k = 0; k < len; k += 4) copy(o + k, o + k - back, 4);
-    } else {
-      for (int k = 0; k < len; k++) o[k] = o[k - back];
-    }
+    if (k != KIND(1) && k != KIND(5)) return k == KIND(2);
+    int len = extra(s, e);
+    e = lookup(s->bits, &DIST, 2), k = e & KINDS;
+    need(s, e & 15);
+    if (k != KIND(1) && k != KIND(5)) return 0;
+    int back = extra(s, e);
+    if (back > s->at || len > s->cap - s->at) return 0;
+    for (int i = 0; i < len; i++, s->at++) s->out[s->at] = s->out[s->at - back];
   }
-  s->bits = bits, s->count = count, s->pos = pos, s->at = at;
-  return ok;
 }
 
 static int codes(Flate *s) {

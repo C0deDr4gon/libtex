@@ -1,22 +1,16 @@
 #pragma once
 
+#include "platform.h"
 #include "vec.h"
 
-static void endpoints(const vec *pts, int count, int n, vec *hi, vec *lo);
 typedef struct {
   ALIGN16 float c[4][16];
   int count;
 } Pal;
 
-static void pal_init(Pal *pal, int count);
-static int pick_w(vec p, vec w, const Pal *pal, int n);
-
 typedef struct {
   vec v[4], w[4];
 } Probe;
-
-static void probe(Probe *p, vec px, vec w);
-static int pick_p(const Probe *p, const Pal *pal, int n);
 
 static inline void pal_set(Pal *pal, int i, vec v) {
   pal->c[0][i] = lane(v, 0);
@@ -24,12 +18,6 @@ static inline void pal_set(Pal *pal, int i, vec v) {
   pal->c[2][i] = lane(v, 2);
   pal->c[3][i] = lane(v, 3);
 }
-static int lsq(const vec *px, const vec *w, const unsigned char *in, const unsigned char *idx, const int *wt, vec *a, vec *z);
-static int lsqf(const vec *px, const vec *w, const unsigned char *in, const unsigned char *idx, const float *ts, vec *a, vec *z);
-static int rank(float *errors, int *found, int cap, float e, void *items, int size);
-static void corner(const vec *pts, int count, int kind, vec *a, vec *z);
-
-#include "platform.h"
 
 static vec mean(const vec *pts, int count) {
   vec m = splat(0);
@@ -116,12 +104,6 @@ static int pick_w(vec px, vec w, const Pal *pal, int n) {
   return pick_p(&p, pal, n);
 }
 
-static int lsq(const vec *px, const vec *w, const unsigned char *in, const unsigned char *idx, const int *wt, vec *a, vec *z) {
-  float t[16];
-  for (int i = 0; i < 16; i++) t[idx[i]] = wt[idx[i]] / 64.0f;
-  return lsqf(px, w, in, idx, t, a, z);
-}
-
 static int lsqf(const vec *px, const vec *w, const unsigned char *in, const unsigned char *idx, const float *ts, vec *a, vec *z) {
   vec aa = splat(0), bb = splat(0), ab = splat(0), ax = splat(0), bx = splat(0);
   for (int i = 0; i < 16; i++) {
@@ -139,6 +121,12 @@ static int lsqf(const vec *px, const vec *w, const unsigned char *in, const unsi
   *a = vdiv(sub(mul(ax, bb), mul(bx, ab)), det);
   *z = vdiv(sub(mul(bx, aa), mul(ax, ab)), det);
   return 1;
+}
+
+static int lsq(const vec *px, const vec *w, const unsigned char *in, const unsigned char *idx, const int *wt, vec *a, vec *z) {
+  float t[16];
+  for (int i = 0; i < 16; i++) t[idx[i]] = wt[idx[i]] / 64.0f;
+  return lsqf(px, w, in, idx, t, a, z);
 }
 
 static int rank(float *errors, int *found, int cap, float e, void *items, int size) {

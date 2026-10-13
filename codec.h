@@ -1,7 +1,7 @@
 #pragma once
 
-#include "libtex.h"
 #include "vec.h"
+#include "libtex.h"
 
 typedef struct {
   void (*encode)(const float *px, unsigned char *out, const tex_options *o);

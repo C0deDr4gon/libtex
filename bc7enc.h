@@ -111,18 +111,10 @@ static void lines(const Mode *m, int partition, const vec *px, vec ends[3][2]) {
 
 static vec weights_of(Enc7 *x, int rotation, int i) { return rotate(x->weight[i], rotation); }
 
-static float assign(Enc7 *x, Block *b, const vec *px, float limit, int only);
 
 static float miss(Enc7 *x, vec c, vec p, int rotation, int i) {
   vec d = sub(rotate(c, rotation), rotate(p, rotation));
   return hsum(mul(mul(d, d), x->weight[i]));
-}
-
-static float build(Enc7 *x, Block *b, int mode, int partition, int rotation, int isel, const vec *px, vec ends[3][2], float limit) {
-  const Mode *m = &MODES[mode];
-  b->mode = mode, b->partition = partition, b->rotation = rotation, b->isel = isel;
-  for (int s = 0; s < m->ns; s++) quantize_pair(b, s, ends[s][1], ends[s][0], m);
-  return assign(x, b, px, limit, -1);
 }
 
 static float term(Enc7 *x, const Pal *r, int j, vec p, int rotation, int i) {
@@ -198,6 +190,13 @@ static float assign(Enc7 *x, Block *b, const vec *px, float limit, int only) {
   copy(b->idx, isel ? alpha : color, 16);
   copy(b->idx2, isel ? color : alpha, 16);
   return e;
+}
+
+static float build(Enc7 *x, Block *b, int mode, int partition, int rotation, int isel, const vec *px, vec ends[3][2], float limit) {
+  const Mode *m = &MODES[mode];
+  b->mode = mode, b->partition = partition, b->rotation = rotation, b->isel = isel;
+  for (int s = 0; s < m->ns; s++) quantize_pair(b, s, ends[s][1], ends[s][0], m);
+  return assign(x, b, px, limit, -1);
 }
 
 static int solve(Enc7 *x, const Mode *m, int partition, int s, int rotation, const vec *px, const unsigned char *idx, int bits, vec *a, vec *z) {

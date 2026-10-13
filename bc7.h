@@ -1,7 +1,10 @@
 #pragma once
 
+#include "platform.h"
 #include "vec.h"
 #include "bc7tables.h"
+#include "bits.h"
+#include "codec.h"
 
 typedef struct {
   int ns, pb, rb, isb, cb, ab, epb, spb, ib, ib2;
@@ -14,7 +17,6 @@ typedef struct {
   unsigned char idx[16], idx2[16];
 } Block;
 
-
 static inline int subset(const Mode *m, int p, int i) {
   return m->ns == 1 ? 0 : m->ns == 2 ? P2[p][i] : P3[p][i];
 }
@@ -22,18 +24,6 @@ static inline int subset(const Mode *m, int p, int i) {
 static inline int anchor(const Mode *m, int p, int s) {
   return !s ? 0 : m->ns == 2 ? A2[p] : s == 1 ? A3A[p] : A3B[p];
 }
-static int bits_of(const Mode *m, int c);
-static int pbit_of(const Block *b, const Mode *m, int e);
-static int unquant(int q, int bits, int p);
-static void expand_endpoint(const int *e, const Mode *m, int p, int *out);
-static vec rotate(vec c, int r);
-static void colors(const Block *b, vec *out);
-static void pack(const Block *b, unsigned char *out);
-
-#include "platform.h"
-#include "bits.h"
-#include "codec.h"
-#include "bc7tables.h"
 
 static const Mode MODES[8] = {
   { 3, 4, 0, 0, 4, 0, 1, 0, 3, 0 },

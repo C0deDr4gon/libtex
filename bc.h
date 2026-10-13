@@ -7,7 +7,7 @@
 #include "codec.h"
 
 typedef struct {
-  vec color_weight[16];
+  vec weight[16];
   unsigned char opaque[16];
 } Enc1;
 
@@ -54,9 +54,9 @@ static Try make(Enc1 *x, const vec *pixels, int c0, int c1, int three, int punch
       t.idx[i] = 3;
       continue;
     }
-    t.idx[i] = pick_w(pixels[i], x->color_weight[i], &set, 3);
+    t.idx[i] = pick_w(pixels[i], x->weight[i], &set, 3);
     vec d = keep(sub(pixels[i], pal[t.idx[i]]), mask(3));
-    t.error += hsum(mul(mul(d, d), x->color_weight[i]));
+    t.error += hsum(mul(mul(d, d), x->weight[i]));
   }
   return t;
 }
@@ -67,7 +67,7 @@ static Try color_fit(Enc1 *x, const vec *pixels, vec a, vec b, int three, int pu
 
 static int refine(Enc1 *x, const vec *pixels, const Try *t, vec *a, vec *b) {
   float ts[4] = { 0, 1, t->four ? 1.0f / 3 : 1.0f / 2, 2.0f / 3 };
-  return lsqf(pixels, x->color_weight, x->opaque, t->idx, ts, a, b);
+  return lsqf(pixels, x->weight, x->opaque, t->idx, ts, a, b);
 }
 
 static Try color_line(Enc1 *x, const vec *pixels, vec a, vec b, int three, int punch, int rounds) {
@@ -107,6 +107,12 @@ static void color_nudge(Enc1 *x, const vec *pixels, Try *best, int three, int pu
   }
 }
 
+static void color_pack(const Try *t, unsigned char *out) {
+  int pos = put(out, 0, t->c0, 16);
+  pos = put(out, pos, t->c1, 16);
+  for (int i = 0; i < 16; i++) pos = put(out, pos, t->idx[i], 2);
+}
+
 static void encode_color(const float *px, unsigned char *out, int punch, const tex_options *o) {
   Enc1 ctx, *x = &ctx;
   vec pixels[16], pts[16], a = splat(0), b = splat(0);
@@ -118,15 +124,13 @@ static void encode_color(const float *px, unsigned char *out, int punch, const t
   for (int i = 0; i < 16; i++) {
     x->opaque[i] = !transparent || px[i * 4 + 3] >= 0.5f;
     float w = punch ? 1 : clamp(px[i * 4 + 3], 1.0f / 64, 1);
-    x->color_weight[i] = mul(vmake(w, w, w, 1), tint(o));
+    x->weight[i] = mul(vmake(w, w, w, 1), tint(o));
     if (x->opaque[i]) pts[count++] = pixels[i];
   }
   if (count) endpoints(pts, count, 3, &a, &b);
   Try best = color_line(x, pixels, a, b, transparent, punch, count ? 2 : 0);
   if (is_fast(o) || !count) {
-    int pos = put(out, 0, best.c0, 16);
-    pos = put(out, pos, best.c1, 16);
-    for (int i = 0; i < 16; i++) pos = put(out, pos, best.idx[i], 2);
+    color_pack(&best, out);
     return;
   }
   Try seen[4];
@@ -151,9 +155,7 @@ static void encode_color(const float *px, unsigned char *out, int punch, const t
     color_nudge(x, pixels, &seen[k], three, punch);
     if (seen[k].error < best.error) best = seen[k];
   }
-  int pos = put(out, 0, best.c0, 16);
-  pos = put(out, pos, best.c1, 16);
-  for (int i = 0; i < 16; i++) pos = put(out, pos, best.idx[i], 2);
+  color_pack(&best, out);
 }
 
 static void decode_color(const unsigned char *in, float *px, int punch) {
@@ -279,8 +281,8 @@ static void encode_channel(const double *values, unsigned char *out, int sign, c
   if (!is_fast(o) && a0 != a1) {
     unsigned char idx[16];
     End best = { a0, a1, channel_error(vs, a0, a1, sign, idx) };
-    for (int o = 0; o < 2; o++) {
-      End e = { o ? a1 : a0, o ? a0 : a1, 0 };
+    for (int flip = 0; flip < 2; flip++) {
+      End e = { flip ? a1 : a0, flip ? a0 : a1, 0 };
       e.e = channel_error(vs, e.a0, e.a1, sign, idx);
       search(vs, &e, sign);
       if (e.e < best.e) best = e;

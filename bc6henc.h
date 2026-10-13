@@ -10,14 +10,14 @@
 #include "bc7tables.h"
 
 typedef struct {
-  vec weight6[16];
-  Probe probes6[16];
+  vec weight[16];
+  Probe probes[16];
   Pal held[2];
-  unsigned char held_idx6[16];
+  unsigned char held_idx[16];
   float held_d[16];
-  Block6 seen6[8];
-  float errors6[8];
-  int found6;
+  Block6 seen[8];
+  float errors[8];
+  int found;
 } Enc6;
 
 static int value(int q, int bits, int sign) { return finish6(unquant6(q, bits, sign), sign); }
@@ -75,15 +75,15 @@ static void ramp6(const Mode6 *m, const int (*q)[3], int s, int sign, Pal *pal) 
 
 static float miss6(Enc6 *x, const Pal *pal, int j, vec p, int i) {
   vec d = sub(vmake(pal->c[0][j], pal->c[1][j], pal->c[2][j], 0), p);
-  return hsum(mul(mul(d, d), x->weight6[i]));
+  return hsum(mul(mul(d, d), x->weight[i]));
 }
 
 static void hold6(Enc6 *x, const Block6 *b, const vec *px, int sign) {
   for (int s = 0; s < b->mode->ns; s++) ramp6(b->mode, b->q, s, sign, &x->held[s]);
   for (int i = 0; i < 16; i++) {
     const Pal *pal = &x->held[subset6(b->mode, b->partition, i)];
-    x->held_idx6[i] = pick_p(&x->probes6[i], pal, 3);
-    x->held_d[i] = miss6(x, pal, x->held_idx6[i], px[i], i);
+    x->held_idx[i] = pick_p(&x->probes[i], pal, 3);
+    x->held_d[i] = miss6(x, pal, x->held_idx[i], px[i], i);
   }
 }
 
@@ -100,10 +100,10 @@ static float assign6(Enc6 *x, Block6 *b, const vec *px, int sign, float limit, i
   for (int i = 0; i < 16; i++) {
     int s = subset6(m, b->partition, i);
     if (s == fixed) {
-      b->idx[i] = x->held_idx6[i];
+      b->idx[i] = x->held_idx[i];
       e += x->held_d[i];
     } else {
-      b->idx[i] = pick_p(&x->probes6[i], pals[s], 3);
+      b->idx[i] = pick_p(&x->probes[i], pals[s], 3);
       e += miss6(x, pals[s], b->idx[i], px[i], i);
     }
     if (e > limit) return e;
@@ -129,7 +129,7 @@ static float assign6(Enc6 *x, Block6 *b, const vec *px, int sign, float limit, i
     flipped[s] = 1;
   }
   for (int i = 0; i < 12; i++) b->vals[i] = 0;
-  for (int e = 0; e < m->ns * 2; e++) for (int k = 0; k < 3; k++) b->vals[k * 4 + e] = m->transformed && e ? b->q[e][k] - b->q[0][k] : b->q[e][k];
+  for (int v = 0; v < m->ns * 2; v++) for (int k = 0; k < 3; k++) b->vals[k * 4 + v] = m->transformed && v ? b->q[v][k] - b->q[0][k] : b->q[v][k];
   if (!clamped) return e;
   e = 0;
   for (int i = 0; i < 16; i++) {
@@ -173,9 +173,9 @@ static void lines6(const Mode6 *m, int partition, const vec *px, vec ends[2][2])
 
 static void consider6(Enc6 *x, Block6 *best, float *least, const Mode6 *m, int partition, const vec *px, int sign, vec ends[2][2]) {
   Block6 b;
-  float e = build6(x, &b, m, partition, px, sign, ends, x->found6 == 8 ? x->errors6[7] : 1.0f / 0.0f);
-  int at = rank(x->errors6, &x->found6, 8, e, x->seen6, sizeof(Block6));
-  if (at >= 0) x->seen6[at] = b;
+  float e = build6(x, &b, m, partition, px, sign, ends, x->found == 8 ? x->errors[7] : 1.0f / 0.0f);
+  int at = rank(x->errors, &x->found, 8, e, x->seen, sizeof(Block6));
+  if (at >= 0) x->seen[at] = b;
   if (e < *least) *least = e, *best = b;
 }
 
@@ -187,7 +187,7 @@ static void refit6(Enc6 *x, Block6 *b, float *e, const vec *px, int sign) {
     int ok = 1;
     for (int s = 0; s < b->mode->ns && ok; s++) {
       members(b, s, in);
-      ok = lsq(px, x->weight6, in, b->idx, w, &ends[s][0], &ends[s][1]);
+      ok = lsq(px, x->weight, in, b->idx, w, &ends[s][0], &ends[s][1]);
     }
     if (!ok) return;
     Block6 c;
@@ -215,17 +215,17 @@ static void start6(const Block6 *b, const vec *px, int kind, vec ends[2][2]) {
 }
 
 static void polish6(Enc6 *x, Block6 *best, float *least, const vec *px, int sign) {
-  for (int k = 0; k < x->found6; k++) {
-    refit6(x, &x->seen6[k], &x->errors6[k], px, sign);
+  for (int k = 0; k < x->found; k++) {
+    refit6(x, &x->seen[k], &x->errors[k], px, sign);
     for (int kind = 0; kind < 5; kind++) {
       vec ends[2][2];
       Block6 c;
-      start6(&x->seen6[k], px, kind, ends);
-      float f = build6(x, &c, x->seen6[k].mode, x->seen6[k].partition, px, sign, ends, 1.0f / 0.0f);
+      start6(&x->seen[k], px, kind, ends);
+      float f = build6(x, &c, x->seen[k].mode, x->seen[k].partition, px, sign, ends, 1.0f / 0.0f);
       refit6(x, &c, &f, px, sign);
-      if (f < x->errors6[k]) x->seen6[k] = c, x->errors6[k] = f;
+      if (f < x->errors[k]) x->seen[k] = c, x->errors[k] = f;
     }
-    if (x->errors6[k] < *least) *least = x->errors6[k], *best = x->seen6[k];
+    if (x->errors[k] < *least) *least = x->errors[k], *best = x->seen[k];
   }
 }
 
@@ -257,9 +257,9 @@ static int step6(Enc6 *x, Block6 *best, float *least, const vec *px, int sign) {
 }
 
 static void deep6(Enc6 *x, Block6 *best, float *least, const vec *px, int sign) {
-  for (int k = 0; k < x->found6; k++) {
-    Block6 b = x->seen6[k];
-    float e = x->errors6[k];
+  for (int k = 0; k < x->found; k++) {
+    Block6 b = x->seen[k];
+    float e = x->errors[k];
     for (int r = 0; r < 12 && step6(x, &b, &e, px, sign); r++) {}
     if (e < *least) *least = e, *best = b;
   }
@@ -276,14 +276,14 @@ static void weigh(Enc6 *x, const vec *px, const tex_options *o) {
   vec top = splat(0);
   for (int i = 0; i < 16; i++) {
     vec g = vmake(slope(lane(px[i], 0)), slope(lane(px[i], 1)), slope(lane(px[i], 2)), 0);
-    x->weight6[i] = mul(mul(g, g), tint(o));
-    top = vmax(top, x->weight6[i]);
+    x->weight[i] = mul(mul(g, g), tint(o));
+    top = vmax(top, x->weight[i]);
   }
   float t = lane(top, 0);
   if (lane(top, 1) > t) t = lane(top, 1);
   if (lane(top, 2) > t) t = lane(top, 2);
-  for (int i = 0; i < 16; i++) x->weight6[i] = mul(x->weight6[i], splat(1 / t));
-  for (int i = 0; i < 16; i++) probe(&x->probes6[i], px[i], x->weight6[i]);
+  for (int i = 0; i < 16; i++) x->weight[i] = mul(x->weight[i], splat(1 / t));
+  for (int i = 0; i < 16; i++) probe(&x->probes[i], px[i], x->weight[i]);
 }
 
 static void encode6(const float *in, unsigned char *out, int sign, const tex_options *o) {
@@ -293,7 +293,7 @@ static void encode6(const float *in, unsigned char *out, int sign, const tex_opt
   weigh(x, px, o);
   Block6 best;
   float least = 1.0f / 0.0f;
-  x->found6 = 0;
+  x->found = 0;
   if (is_fast(o)) {
     float scores[32];
     spreads(px, 2, 32, scores);

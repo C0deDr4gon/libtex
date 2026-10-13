@@ -1,7 +1,5 @@
 #pragma once
 
-static int to_half(double v, int sign);
-static double from_half(int h);
 
 #include "platform.h"
 

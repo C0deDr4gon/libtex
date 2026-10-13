@@ -1,20 +1,13 @@
 #pragma once
 
-
-static const int *weights(int bits);
+#include "platform.h"
+#include "vec.h"
 
 static inline int lerp(int a, int b, int w) { return (a * (64 - w) + b * w + 32) >> 6; }
-
-#include "vec.h"
 
 static inline ivec lerp4(ivec a, ivec b, ivec w) {
   return ishr(iadd(iadd(imul(a, isub(isplat(64), w)), imul(b, w)), isplat(32)), 6);
 }
-
-static int put(unsigned char *buf, int pos, unsigned v, int n);
-static unsigned get(const unsigned char *buf, int pos, int n);
-
-#include "platform.h"
 
 static const int WEIGHTS[16] = { 0, 4, 9, 13, 17, 21, 26, 30, 34, 38, 43, 47, 51, 55, 60, 64 };
 static const int W2[4] = { 0, 21, 43, 64 };

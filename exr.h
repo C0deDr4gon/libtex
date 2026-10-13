@@ -195,9 +195,9 @@ static int piz(Piz *z, const unsigned char *data, int length, unsigned short *bu
   if (!huffman(z, data + p + 4, n, buf, size / 2)) return 0;
   int at = 0;
   for (int c = 0; c < count; c++) {
-    int n = chans[c * 2] == 1 ? 1 : 2;
-    for (int j = 0; j < n; j++) wavelet(buf, at + j, width, n, lines, width * n, k - 1);
-    at += width * lines * n;
+    int w = chans[c * 2] == 1 ? 1 : 2;
+    for (int j = 0; j < w; j++) wavelet(buf, at + j, width, w, lines, width * w, k - 1);
+    at += width * lines * w;
   }
   for (int i = 0; i < size / 2; i++) buf[i] = z->lut[buf[i]];
   rows(buf, out, width, lines, chans, count);
