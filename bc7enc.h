@@ -353,7 +353,7 @@ static void bc7_encode(const float *in, unsigned char *out, const tex_options *o
   Enc7 ctx, *x = &ctx;
   vec pixels[16], px[16], ends[3][2];
   for (int i = 0; i < 16; i++) pixels[i] = mul(load(in + i * 4), splat(255));
-  for (int i = 0; i < 16; i++) x->weight[i] = mul(with(splat(clamp(in[i * 4 + 3], 1.0f / 64, 1)), 3, 1), tint(o));
+  for (int i = 0; i < 16; i++) x->weight[i] = tint(o);
   for (int r = 0; r < (is_fast(o) ? 1 : 4); r++) for (int i = 0; i < 16; i++) probe(&x->probes[r][i], rotate(pixels[i], r), weights_of(x, r, i));
   Block best;
   float least = 1.0f / 0.0f;

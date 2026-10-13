@@ -123,8 +123,7 @@ static void encode_color(const float *px, unsigned char *out, int punch, const t
   }
   for (int i = 0; i < 16; i++) {
     x->opaque[i] = !transparent || px[i * 4 + 3] >= 0.5f;
-    float w = punch ? 1 : clamp(px[i * 4 + 3], 1.0f / 64, 1);
-    x->weight[i] = mul(vmake(w, w, w, 1), tint(o));
+    x->weight[i] = tint(o);
     if (x->opaque[i]) pts[count++] = pixels[i];
   }
   if (count) endpoints(pts, count, 3, &a, &b);
