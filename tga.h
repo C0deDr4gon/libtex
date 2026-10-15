@@ -174,6 +174,16 @@ int tex_tga_pixels(const float *px, int w, int h, int n, int rle, unsigned char 
   return at;
 }
 
+int tex_tga_header(int w, int h, int n, int rle, unsigned char *out) {
+  zero(out, 18);
+  out[2] = (n < 3 ? 3 : 2) + (rle ? 8 : 0);
+  out[12] = w & 255, out[13] = w >> 8 & 255;
+  out[14] = h & 255, out[15] = h >> 8 & 255;
+  out[16] = n * 8;
+  out[17] = (n == 2 || n == 4 ? 8 : 0) | 0x20;
+  return 18;
+}
+
 typedef struct {
   int type, kind, width, height, n, desc, pos, cmap, cmap_bytes, cmap_start, cmap_count, alpha, premultiplied;
 } TgaFile;

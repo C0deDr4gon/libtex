@@ -3,7 +3,7 @@
 Header only C texture library. No libc, no alloc, no deps.
 
 - BC1, BC2, BC3, BC4, BC5 (+ SNORM), BC6H (UF16 / SF16), BC7: encode (Best / Fast) + decode
-- PNG, TGA, EXR read to float RGBA. PNG rows / TGA pixels / EXR half planes for writers
+- PNG, TGA, EXR read to float RGBA. PNG rows / TGA header + pixels / EXR half planes for writers
 - Mips, resize (box / bilinear / Lanczos), swizzle, premultiply, flip / rotate
 
 ## Use

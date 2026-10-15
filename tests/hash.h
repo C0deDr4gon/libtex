@@ -74,6 +74,8 @@ static unsigned ops(unsigned h, const float *px, int w, int ht, Get get) {
   int len = tex_tga_pixels(px, w, ht, 4, 1, b, b + n * 6);
   h = fnv(h, &gray, 4);
   h = fnv(h, b, len);
+  len = tex_tga_header(w, ht, 4, 1, b);
+  h = fnv(h, b, len);
   unsigned short *halves = (unsigned short *)get(n * 2);
   tex_half_plane(px, n, 1, halves);
   return fnv(h, halves, n * 2);

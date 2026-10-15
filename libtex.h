@@ -32,6 +32,7 @@ void tex_png_rows(const float *px, int w, int h, int n, int depth, int mode, uns
 int tex_tga_info(const unsigned char *bytes, int length, tex_info *info);
 int tex_tga_read(const unsigned char *bytes, int length, float *out, void *scratch);
 int tex_tga_gray(const float *px, int count);
+int tex_tga_header(int w, int h, int n, int rle, unsigned char *out);
 int tex_tga_pixels(const float *px, int w, int h, int n, int rle, unsigned char *out, unsigned char *row);
 int tex_exr_info(const unsigned char *bytes, int length, tex_info *info);
 int tex_exr_read(const unsigned char *bytes, int length, float *out, void *scratch);
