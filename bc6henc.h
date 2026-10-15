@@ -173,7 +173,7 @@ static void lines6(const Mode6 *m, int partition, const vec *px, vec ends[2][2])
 
 static void consider6(Enc6 *x, Block6 *best, float *least, const Mode6 *m, int partition, const vec *px, int sign, vec ends[2][2]) {
   Block6 b;
-  float e = build6(x, &b, m, partition, px, sign, ends, x->found == 8 ? x->errors[7] : 1.0f / 0.0f);
+  float e = build6(x, &b, m, partition, px, sign, ends, x->found == 8 ? x->errors[7] : (float)finf());
   int at = rank(x->errors, &x->found, 8, e, x->seen, sizeof(Block6));
   if (at >= 0) x->seen[at] = b;
   if (e < *least) *least = e, *best = b;
@@ -221,7 +221,7 @@ static void polish6(Enc6 *x, Block6 *best, float *least, const vec *px, int sign
       vec ends[2][2];
       Block6 c;
       start6(&x->seen[k], px, kind, ends);
-      float f = build6(x, &c, x->seen[k].mode, x->seen[k].partition, px, sign, ends, 1.0f / 0.0f);
+      float f = build6(x, &c, x->seen[k].mode, x->seen[k].partition, px, sign, ends, (float)finf());
       refit6(x, &c, &f, px, sign);
       if (f < x->errors[k]) x->seen[k] = c, x->errors[k] = f;
     }
@@ -272,6 +272,13 @@ static float slope(float h) {
   return lane(l, 1) - lane(l, 0);
 }
 
+static float peak3(vec v) {
+  float t = lane(v, 0);
+  if (lane(v, 1) > t) t = lane(v, 1);
+  if (lane(v, 2) > t) t = lane(v, 2);
+  return t;
+}
+
 static void weigh(Enc6 *x, const vec *px, const tex_options *o) {
   vec top = splat(0);
   for (int i = 0; i < 16; i++) {
@@ -279,9 +286,11 @@ static void weigh(Enc6 *x, const vec *px, const tex_options *o) {
     x->weight[i] = mul(mul(g, g), tint(o));
     top = vmax(top, x->weight[i]);
   }
-  float t = lane(top, 0);
-  if (lane(top, 1) > t) t = lane(top, 1);
-  if (lane(top, 2) > t) t = lane(top, 2);
+  float t = peak3(top);
+  if (t == 0) {
+    for (int i = 0; i < 16; i++) x->weight[i] = tint(o);
+    t = peak3(tint(o));
+  }
   for (int i = 0; i < 16; i++) x->weight[i] = mul(x->weight[i], splat(1 / t));
   for (int i = 0; i < 16; i++) probe(&x->probes[i], px[i], x->weight[i]);
 }
@@ -292,7 +301,7 @@ static void encode6(const float *in, unsigned char *out, int sign, const tex_opt
   for (int i = 0; i < 16; i++) px[i] = vmake(to_half(in[i * 4], sign), to_half(in[i * 4 + 1], sign), to_half(in[i * 4 + 2], sign), 0);
   weigh(x, px, o);
   Block6 best;
-  float least = 1.0f / 0.0f;
+  float least = (float)finf();
   x->found = 0;
   if (is_fast(o)) {
     float scores[32];

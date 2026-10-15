@@ -56,7 +56,7 @@ static void quantize_pair(Block *b, int s, vec lo, vec hi, const Mode *m) {
     ez[p] = error(hi, qz[p], m, pb);
   }
   int best = 0;
-  float least = 1.0f / 0.0f;
+  float least = (float)finf();
   for (int i = 0; i < count; i++) {
     float c = ea[n > 1 ? pairs[i][0] : 0] + ez[n > 1 ? pairs[i][1] : 0];
     if (c < least) least = c, best = i;
@@ -173,7 +173,7 @@ static float assign(Enc7 *x, Block *b, const vec *px, float limit, int only) {
   int av[8];
   for (int j = 0; j < 1 << ab; j++) av[j] = lerp(E[0][3], E[1][3], w[j]);
   for (int i = 0; i < 16; i++) {
-    float a = lane(px[i], 3), dist = 1.0f / 0.0f;
+    float a = lane(px[i], 3), dist = (float)finf();
     for (int j = 0; j < 1 << ab; j++) {
       float d = a - av[j];
       if (d * d < dist) dist = d * d, alpha[i] = j;
@@ -229,7 +229,7 @@ static int fit(Enc7 *x, const Block *b, const vec *px, vec ends[3][2]) {
 
 static void consider(Enc7 *x, Block *best, float *least, int mode, int partition, int rotation, int isel, const vec *px, vec ends[3][2], const vec *pixels) {
   Block b;
-  float e = build(x, &b, mode, partition, rotation, isel, px, ends, x->found == 8 ? x->errors[7] : 1.0f / 0.0f);
+  float e = build(x, &b, mode, partition, rotation, isel, px, ends, x->found == 8 ? x->errors[7] : (float)finf());
   int at = rank(x->errors, &x->found, 8, e, x->seen, sizeof(Block));
   if (at >= 0) x->seen[at] = b;
   if (e < *least) *least = e, *best = b;
@@ -276,7 +276,7 @@ static void polish(Enc7 *x, Block *best, float *least, const vec *pixels) {
     for (int kind = 0; kind < 5; kind++) {
       Block c;
       start(&x->seen[k], px, kind, ends);
-      float f = build(x, &c, x->seen[k].mode, x->seen[k].partition, x->seen[k].rotation, x->seen[k].isel, px, ends, 1.0f / 0.0f);
+      float f = build(x, &c, x->seen[k].mode, x->seen[k].partition, x->seen[k].rotation, x->seen[k].isel, px, ends, (float)finf());
       refit(x, &c, &f, pixels);
       if (f < x->errors[k]) x->seen[k] = c, x->errors[k] = f;
     }
@@ -356,7 +356,7 @@ static void bc7_encode(const float *in, unsigned char *out, const tex_options *o
   for (int i = 0; i < 16; i++) x->weight[i] = tint(o);
   for (int r = 0; r < (is_fast(o) ? 1 : 4); r++) for (int i = 0; i < 16; i++) probe(&x->probes[r][i], rotate(pixels[i], r), weights_of(x, r, i));
   Block best;
-  float least = 1.0f / 0.0f;
+  float least = (float)finf();
   float s2[64];
   x->found = 0;
   spreads(pixels, 2, 64, s2);

@@ -183,7 +183,7 @@ static void channel_ramp(int a0, int a1, int sign, double *r) {
 static int channel_pick(const float *vs, const double *r, unsigned char *out, int pos) {
   for (int i = 0; i < 16; i += 4) {
     vec v = load(vs + i);
-    vec best = splat(1.0f / 0.0f);
+    vec best = splat((float)finf());
     ivec index = isplat(0);
     for (int j = 0; j < 8; j++) {
       vec d = vabs(sub(v, splat(r[j])));
@@ -204,7 +204,7 @@ static float channel_error(const float *vs, int a0, int a1, int sign, unsigned c
   channel_ramp(a0, a1, sign, r);
   float total = 0;
   for (int i = 0; i < 16; i++) {
-    float best = 1.0f / 0.0f;
+    float best = (float)finf();
     for (int j = 0; j < 8; j++) {
       float d = vs[i] - r[j];
       if (d * d < best) best = d * d, idx[i] = j;
@@ -268,7 +268,7 @@ static void search(const float *vs, End *best, int sign) {
 
 static void encode_channel(const double *values, unsigned char *out, int sign, const tex_options *o) {
   float vs[16];
-  double r[8], hi = -1.0 / 0.0, lo = 1.0 / 0.0;
+  double r[8], hi = -finf(), lo = finf();
   double scale = sign ? 127 : 255;
   for (int i = 0; i < 16; i++) {
     vs[i] = clamp(sign ? values[i] * 2 - 1 : values[i], sign ? -1 : 0, 1);

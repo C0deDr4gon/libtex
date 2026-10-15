@@ -30,7 +30,12 @@ if (tex_tga_info(bytes, length, &info) == TEX_OK) {
 }
 ```
 
-Build: clang `--target=wasm32 -msimd128 -ffreestanding -nostdlib`. Native (SSE) build is planned.
+Build:
+- Wasm: clang `--target=wasm32 -msimd128 -ffreestanding -nostdlib`
+- Native: any C11 compiler (clang, gcc, MSVC). SSE4.1 path with `-msse4.1` / `-mavx2` / MSVC `/arch:AVX` or `/arch:AVX2`, else plain C. Define `LIBTEX_SCALAR` to force plain C
+- No FP contraction (`-ffp-contract=off`, MSVC default `/fp:precise`): output then is bit identical to wasm
+
+Test: `node tests/run.js [textures dir]` builds wasm + native SSE / AVX2 / scalar, compares hashes.
 
 ## License
 

@@ -8,16 +8,17 @@ Header only C texture library. BC1-5 / BC6H / BC7 encode + decode, PNG / TGA / E
 - PLAN.md = steps with checkboxes. Do only next unchecked step. Tick box in same commit.
 - No comments in code.
 - Code simple. Code clean. Small files. Includes at file top (platform.h, vec.h, rest). Define before use, no forward declarations.
-- Tests live in users (Texel tests/ hash + quality floors). Change here -> run Texel tests.
+- Tests: `node tests/run.js [dir]` = native (SSE4.1, AVX2, scalar) vs wasm hash, must be same. Quality floors live in Texel tests. Change here -> run both.
 - Speed work must keep blocks bit identical (hash check old vs new build, every format, Best + Fast).
 - CLAUDE.md lines factual. Update Layout when files change.
 
 ## Stack
 - C, header only (libtex.h, LIBTEX_IMPLEMENTATION pulls in the other .h files as one unit). Public names tex_*, everything else static.
 - No alloc: caller gives every buffer (scratch sizes from tex_*_scratch). No mutable globals: encoder state in a per call context on the stack (Enc7 / Enc6 / Enc1), lookup tables filled once by tex_init() (call before use / threads). Only exception: inflate Huffman tables LIT / DIST are THREAD (thread local, fixed address = shorter decode chain in wasm). Thread safe after tex_init.
-- No libc, freestanding. Only platform.h and vec.h use __builtin_* / __attribute__ / wasm_*.
+- Wasm: no libc, freestanding. Native: math.h / string.h only (platform.h). Only platform.h and vec*.h use __builtin_* / __attribute__ / __declspec / intrinsics.
+- Native = wasm bit for bit: backends copy wasm semantics (min / max: NaN out, -0 < +0; trunc saturates, NaN -> 0; swizzle index >= 16 -> 0; select bitwise). Build with no FP contraction (-ffp-contract=off; MSVC default /fp:precise). No constant 1 / 0 (MSVC C2124): finf().
 - Error metric: plain RGBA (x tint per channel). No alpha weighting.
-- SIMD: only vec.h names wasm_* / v128_t. Struct types vec / ivec / dvec, MSVC safe (no vector extensions, fixed shuffles as macros). One pixel = one vec (r g b a float). Now wasm simd128 only (clang --target=wasm32 -msimd128).
+- SIMD: vec.h picks backend: vec_wasm.h (__wasm_simd128__), vec_sse.h (__SSE4_1__ or __AVX__, not LIBTEX_SCALAR), else vec_scalar.h. Struct types vec / ivec / dvec, MSVC safe (no vector extensions, fixed shuffles as macros). One pixel = one vec (r g b a float).
 - One file per image format: png.h / tga.h / exr.h hold all code for that format (file, pixels, write). BC1-5 all in bc.h. Shared: inflate.h, half.h. New codec: Codec in its file, add to CODECS (roundtrip.h) + tex_format, same order (users mirror the order).
 - Floats out RGBA. png / tga 0..1 (same as v / max), exr HDR.
 
@@ -27,8 +28,12 @@ Header only C texture library. BC1-5 / BC6H / BC7 encode + decode, PNG / TGA / E
 - README.md: what, use, API.
 - LICENSE: MIT.
 - libtex.h: public API: tex_format, tex_error, tex_info, encode / decode blocks, score, mips, edits, png / tga / exr file read (tex_info { width, height, bits, compression, scratch }, tex_error)
-- platform.h: ALIGN16, THREAD (_Thread_local), fsqrt, ffloor, fceil, fround, clamp, fnan, finf, copy, zero
-- vec.h: SIMD layer: vec (4 float), ivec (4 int / mask), dvec (2 double). Math, compare, vselect, lanes, shuffles, int ops, iload4 / istore4 (32 bit), convert, narrow / widen bytes, vswizzle, double ops, mask(n), hsum, dot, log2_1p
+- platform.h: wasm (__builtin_*) or native (math.h / string.h, MSVC __declspec): ALIGN16, THREAD, fsqrt, ffloor, fceil, fnan, finf, copy, zero; fround, clamp, u64
+- vec.h: SIMD layer: backend pick + shared mask(n), hsum, dot, log2_1p. vec (4 float), ivec (4 int / mask), dvec (2 double)
+- vec_wasm.h / vec_sse.h / vec_scalar.h: backends, same names: math, compare, vselect, lanes, shuffles, int ops, iload4 / istore4 (32 bit), convert, narrow / widen bytes, vswizzle, double ops
+- tests/hash.h: hash of decode (file or synthetic) + every codec Best / Fast (blocks, decoded, score) + mips, resize, orient, swizzle, premultiply, bytes, tga pixels, half plane
+- tests/native.c: native driver (prints hashes). tests/wasm.c: wasm driver (bump alloc, init, run)
+- tests/run.js: build wasm + native sse / avx2 / scalar (CC, default clang), hash Texel textures (default ../Texel/tests/textures), compare
 - codec.h: Codec { encode(px, out, tex_options), decode, size } per format. tex_options { quality Best / Fast, weight r g b } for BC7 / BC6H / BC1-3 color + score. NULL = TEX_DEFAULT. is_fast(o), tint(o)
 - roundtrip.h: tex_encode: block loop, optional block bytes out. tex_decode / tex_decode_blocks: blocks -> pixels. CODECS table, id = tex_format
 - none.h: NONE: raw copy, test codec
@@ -50,4 +55,4 @@ Header only C texture library. BC1-5 / BC6H / BC7 encode + decode, PNG / TGA / E
 - bc7enc.h: BC7 encode: modes 1 (best spread partition), 6, 5 first; Fast stops there. Best: brute force every partition of modes 0/1/2/3/7 + modes 4/5 all rotations, least squares refit + start lines (inset + 4 box diagonals) on best 8 candidates, nudge endpoints + pair moves + p-bits on best 8. Error summed during index pick, stops early once worse than needed. Nudge reuses picks of unchanged subsets. Refit covers modes 4/5 (color and alpha indices apart).
 - bc7tables.h: BC7 partition + anchor tables, bytes
 - bc6h.h: BC6H Mode6 (bit field table), MODES6 (14 modes, field byte = slot << 4 | bit), Block6, unquant, endpoints, palette, colors, pack, unpack, decode
-- bc6henc.h: BC6H encode: error in half space weighted per channel by log2(1 + v) slope (pick, cost, refit). Fast: best spread partition, 7 modes. Best: every partition x all 14 modes, refit + start lines on best 8, nudge endpoints + pair moves. Anchor index too high flips endpoints. Error summed during index pick, stops early once worse than needed. Nudge reuses picks of unchanged subset
+- bc6henc.h: BC6H encode: error in half space weighted per channel by log2(1 + v) slope (pick, cost, refit; all slopes 0 (black block) -> tint weights). Fast: best spread partition, 7 modes. Best: every partition x all 14 modes, refit + start lines on best 8, nudge endpoints + pair moves. Anchor index too high flips endpoints. Error summed during index pick, stops early once worse than needed. Nudge reuses picks of unchanged subset

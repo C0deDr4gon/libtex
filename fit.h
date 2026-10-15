@@ -51,7 +51,7 @@ static void endpoints(const vec *pts, int count, int n, vec *hi, vec *lo) {
   ivec lanes = mask(n);
   vec m = mean(pts, count);
   vec v = axis(pts, count, m, lanes);
-  float a = 1.0f / 0.0f, b = -1.0f / 0.0f;
+  float a = (float)finf(), b = -(float)finf();
   for (int p = 0; p < count; p++) {
     float t = dot(sub(pts[p], m), v);
     if (t < a) a = t;
@@ -86,7 +86,7 @@ static void probe(Probe *p, vec px, vec w) {
 }
 
 static int pick_p(const Probe *p, const Pal *pal, int n) {
-  vec best = splat(1.0f / 0.0f);
+  vec best = splat((float)finf());
   ivec index = isplat(0);
   for (int i = 0; i < pal->count; i += 4) {
     vec d = add(add(mul(p->w[0], square(sub(p->v[0], load(pal->c[0] + i)))), mul(p->w[1], square(sub(p->v[1], load(pal->c[1] + i))))), mul(p->w[2], square(sub(p->v[2], load(pal->c[2] + i)))));
