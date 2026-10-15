@@ -8,9 +8,7 @@ Header only C texture library. No libc, no alloc, no deps.
 
 ## Use
 
-```sh
-git submodule add https://github.com/C0deDr4gon/libtex ext/libtex
-```
+Copy the `.h` files and `LICENSE` into your project (e.g. `ext/libtex`).
 
 One C file:
 

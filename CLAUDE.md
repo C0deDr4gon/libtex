@@ -1,6 +1,6 @@
 # libtex
 
-Header only C texture library. BC1-5 / BC6H / BC7 encode + decode, PNG / TGA / EXR read + write helpers, mips, resize, small pixel ops. Used by Texel (wasm), Meshlet (wasm), NoiseBuilder (native) as git submodule.
+Header only C texture library. BC1-5 / BC6H / BC7 encode + decode, PNG / TGA / EXR read + write helpers, mips, resize, small pixel ops. Used by Texel (wasm), Meshlet (wasm), NoiseBuilder (native): headers + LICENSE copied into their ext/libtex (repo private, no submodule). Change here -> copy to users.
 
 ## Rules
 - Chat short. Caveman talk. Show code, not words.
