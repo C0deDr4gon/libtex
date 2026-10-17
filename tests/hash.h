@@ -64,6 +64,8 @@ static unsigned ops(unsigned h, const float *px, int w, int ht, Get get) {
   h = fnv(h, a, n * 16);
   tex_premultiply(a, n, 1);
   h = fnv(h, a, n * 16);
+  tex_bump_normal(px, w, ht, 2.5f, a);
+  h = fnv(h, a, n * 16);
   unsigned char *b = (unsigned char *)get(n * 8 + ht * 8);
   int exact = tex_to_bytes(px, n * 4, b);
   h = fnv(h, &exact, 4);
