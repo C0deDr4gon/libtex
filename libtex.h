@@ -37,6 +37,7 @@ int tex_tga_pixels(const float *px, int w, int h, int n, int rle, unsigned char 
 int tex_exr_info(const unsigned char *bytes, int length, tex_info *info);
 int tex_exr_read(const unsigned char *bytes, int length, float *out, void *scratch);
 void tex_half_plane(const float *px, int count, int k, unsigned short *out);
+void tex_bump_normal(const float *height, int w, int h, float scale, float *out);
 
 #endif
 
@@ -50,5 +51,6 @@ void tex_half_plane(const float *px, int count, int k, unsigned short *out);
 #include "png.h"
 #include "tga.h"
 #include "exr.h"
+#include "bump.h"
 #include "init.h"
 #endif
